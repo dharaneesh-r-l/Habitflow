@@ -82,11 +82,13 @@ export interface Achievement {
 
 export interface UserStats {
   xp: number;
+  challengeXP: number;
   level: number;
   currentStreak: number;
   longestStreak: number;
   totalCompletions: number;
   perfectDays: number;
+  dailyChallengeClaimedDate: string | null;
 }
 
 export interface AppPreferences {

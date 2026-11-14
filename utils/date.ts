@@ -11,6 +11,25 @@ import {
   addDays,
   subDays,
 } from 'date-fns';
+import { CompletionEntry, Habit } from '@/types';
+
+export function isCompletionComplete(
+  habit: Pick<Habit, 'type' | 'target'>,
+  completion?: CompletionEntry
+): boolean {
+  if (!completion) return false;
+  return habit.type === 'boolean' || completion.value >= habit.target;
+}
+
+export function getCompletedEntries(
+  habit: Pick<Habit, 'id' | 'type' | 'target'>,
+  completions: CompletionEntry[]
+): CompletionEntry[] {
+  return completions.filter(
+    (completion) =>
+      completion.habitId === habit.id && isCompletionComplete(habit, completion)
+  );
+}
 
 export function todayKey(): string {
   return format(new Date(), 'yyyy-MM-dd');

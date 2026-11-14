@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Switch, FlatList } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Switch, FlatList, Alert } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Button } from '@/components/ui/Button';
 import { useAppTheme } from '@/theme/ThemeContext';
@@ -8,11 +7,12 @@ import { Habit, HabitCategory, HabitType, Frequency, DayOfWeek, RoutinePeriod, R
 import { HABIT_LIBRARY } from '@/data/habitLibrary';
 import { Icon } from '@/components/IconHelper';
 import { uid } from '@/utils/date';
-import { Plus, Clock, Bell, Trash2, X, Check } from 'lucide-react-native';
+import { Plus, Trash2 } from 'lucide-react-native';
+import { spacing } from '@/theme/tokens';
 
 interface HabitFormProps {
   initialHabit?: Habit;
-  onSave: (habit: Omit<Habit, 'id' | 'createdAt' | 'order'>) => void;
+  onSave: (habit: Omit<Habit, 'id' | 'createdAt' | 'order'>) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -43,13 +43,14 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
   const [daysOfWeek, setDaysOfWeek] = useState<DayOfWeek[]>(initialHabit?.daysOfWeek || [0, 1, 2, 3, 4, 5, 6]);
   const [target, setTarget] = useState(String(initialHabit?.target || 1));
   const [unit, setUnit] = useState(initialHabit?.unit || 'done');
-  const [color, setColor] = useState(initialHabit?.color || '#7C5CFC');
+  const [color, setColor] = useState(initialHabit?.color || theme.primary);
   const [icon, setIcon] = useState(initialHabit?.icon || 'Target');
   const [routine, setRoutine] = useState<RoutinePeriod | null>(initialHabit?.routine || null);
   const [reminders, setReminders] = useState<Reminder[]>(initialHabit?.reminders || []);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const toggleDay = (day: DayOfWeek) => {
     setDaysOfWeek((prev) =>
@@ -58,7 +59,15 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
   };
 
   const addReminder = () => {
-    setReminders([...reminders, { id: uid(), time: '08:00', days: [], enabled: true, title: name || 'Habit', message: `Time for ${name}`, sound: true }]);
+    setReminders([...reminders, {
+      id: uid(),
+      time: '08:00',
+      days: frequency === 'daily' ? [] : daysOfWeek,
+      enabled: true,
+      title: name || 'Habit',
+      message: `Time for ${name}`,
+      sound: true,
+    }]);
   };
 
   const updateReminder = (id: string, updates: Partial<Reminder>) => {
@@ -85,31 +94,53 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
     setShowLibrary(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
-    onSave({
-      name: name.trim(),
-      description: description.trim(),
-      category,
-      type,
-      frequency,
-      daysOfWeek: frequency === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : daysOfWeek,
-      target: parseInt(target) || 1,
-      unit: unit.trim() || 'done',
-      color,
-      icon,
-      routine,
-      startDate: initialHabit?.startDate || new Date().toISOString().slice(0, 10),
-      archived: initialHabit?.archived || false,
-      paused: initialHabit?.paused || false,
-      reminders,
-    });
+    const targetValue = Number(target);
+    if (type !== 'boolean' && (!Number.isFinite(targetValue) || targetValue <= 0)) {
+      Alert.alert('Check your target', 'Enter a number greater than zero.');
+      return;
+    }
+    if (frequency !== 'daily' && daysOfWeek.length === 0) {
+      Alert.alert('Choose a schedule', 'Select at least one day for this habit.');
+      return;
+    }
+    if (reminders.some((reminder) => reminder.enabled && !/^([01]\d|2[0-3]):[0-5]\d$/.test(reminder.time))) {
+      Alert.alert('Check reminder time', 'Use 24-hour time in HH:mm format, such as 08:30.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSave({
+        name: name.trim(),
+        description: description.trim(),
+        category,
+        type,
+        frequency,
+        daysOfWeek: frequency === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : daysOfWeek,
+        target: type === 'boolean' ? 1 : targetValue,
+        unit: unit.trim() || 'done',
+        color,
+        icon,
+        routine,
+        startDate: initialHabit?.startDate || new Date().toISOString().slice(0, 10),
+        archived: initialHabit?.archived || false,
+        paused: initialHabit?.paused || false,
+        reminders,
+      });
+    } catch {
+      Alert.alert('Could not save habit', 'Please try again. Your changes have not been confirmed.');
+      setSaving(false);
+      return;
+    }
+    setSaving(false);
     onClose();
   };
 
   return (
     <ModalSheet visible onClose={onClose} title={initialHabit ? 'Edit Habit' : 'New Habit'}>
-      <View style={{ gap: 18 }}>
+      <View style={{ gap: spacing.lg }}>
         {/* Library button */}
         {!initialHabit && (
           <Button title="Browse Habit Library" variant="outline" onPress={() => setShowLibrary(true)} />
@@ -196,6 +227,7 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
                 value={target}
                 onChangeText={setTarget}
                 keyboardType="numeric"
+                accessibilityLabel="Habit target"
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -351,7 +383,7 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
         </View>
 
         {/* Save */}
-        <Button title={initialHabit ? 'Save Changes' : 'Create Habit'} onPress={handleSave} disabled={!name.trim()} style={{ marginTop: 4 }} />
+        <Button title={initialHabit ? 'Save Changes' : 'Create Habit'} onPress={handleSave} disabled={!name.trim()} loading={saving} style={{ marginTop: 4 }} />
       </View>
 
       {/* Library Modal */}
@@ -424,7 +456,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   dayBtn: {
-    width: 38,
+    flex: 1,
+    maxWidth: 38,
     height: 38,
     borderRadius: 10,
     borderWidth: 1.5,

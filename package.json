@@ -54,6 +54,8 @@
     "@babel/plugin-transform-typescript": "^7.27.1",
     "@babel/preset-typescript": "^7.27.1",
     "@types/react": "~19.2.4",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.2",
     "typescript": "~6.0.3"
   }
 }

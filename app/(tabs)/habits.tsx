@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Plus, Archive, Pause, Play, Trash2, Edit3, MoreVertical, Filter } from 'lucide-react-native';
+import { Plus, Archive, Pause, Play, Trash2, Edit3 } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
 import { Card } from '@/components/ui/Card';
@@ -12,7 +12,8 @@ import { HabitFormModal } from '@/components/HabitFormModal';
 import { HabitItem } from '@/components/HabitItem';
 import { Icon } from '@/components/IconHelper';
 import { Habit, CATEGORIES, HabitCategory, CATEGORY_COLORS } from '@/types';
-import { calculateStreak } from '@/utils/date';
+import { calculateStreak, getCompletedEntries, isCompletionComplete, todayKey } from '@/utils/date';
+import { spacing, typeScale } from '@/theme/tokens';
 
 export default function HabitsScreen() {
   const { theme } = useAppTheme();
@@ -25,6 +26,7 @@ export default function HabitsScreen() {
   const pauseHabit = useHabitStore((s) => s.pauseHabit);
   const toggleCompletion = useHabitStore((s) => s.toggleCompletion);
   const logCompletion = useHabitStore((s) => s.logCompletion);
+  const removeCompletion = useHabitStore((s) => s.removeCompletion);
   const getCompletionForHabitOnDate = useHabitStore((s) => s.getCompletionForHabitOnDate);
 
   const [showForm, setShowForm] = useState(false);
@@ -35,7 +37,7 @@ export default function HabitsScreen() {
 
   const filteredHabits = useMemo(() => {
     return habits
-      .filter((h) => (showArchived ? true : !h.archived))
+      .filter((h) => (showArchived ? h.archived : !h.archived))
       .filter((h) => filterCategory === 'all' || h.category === filterCategory)
       .sort((a, b) => a.order - b.order);
   }, [habits, filterCategory, showArchived]);
@@ -50,13 +52,36 @@ export default function HabitsScreen() {
   };
 
   const handleToggle = (habit: Habit) => {
-    const comp = getCompletionForHabitOnDate(habit.id, new Date().toISOString().slice(0, 10));
+    const date = todayKey();
+    const comp = getCompletionForHabitOnDate(habit.id, date);
     if (habit.type === 'boolean') {
       toggleCompletion(habit.id);
     } else {
+      if (isCompletionComplete(habit, comp)) {
+        removeCompletion(habit.id, date);
+        return;
+      }
       const next = comp ? comp.value + Math.max(1, Math.round(habit.target * 0.1)) : Math.max(1, Math.round(habit.target * 0.25));
       logCompletion(habit.id, Math.min(next, habit.target));
     }
+  };
+
+  const confirmDelete = (habit: Habit) => {
+    Alert.alert(
+      'Delete habit?',
+      `"${habit.name}" and its completion history will be permanently deleted.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void deleteHabit(habit.id);
+            setMenuHabit(undefined);
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -66,13 +91,15 @@ export default function HabitsScreen() {
         <Pressable
           onPress={() => { setEditingHabit(undefined); setShowForm(true); }}
           style={(state) => ({ ...styles.addBtn, backgroundColor: theme.primary, opacity: state.pressed ? 0.85 : 1 })}
+          accessibilityRole="button"
+          accessibilityLabel="Create habit"
         >
           <Plus size={22} color="#fff" />
         </Pressable>
       </View>
 
       {/* Filter chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12, gap: 8 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.sm }}>
         <Pressable
           onPress={() => setFilterCategory('all')}
           style={[styles.chip, { backgroundColor: filterCategory === 'all' ? theme.primary : theme.inputBg, borderColor: filterCategory === 'all' ? theme.primary : theme.border }]}
@@ -94,22 +121,34 @@ export default function HabitsScreen() {
       <Pressable
         onPress={() => setShowArchived(!showArchived)}
         style={{ paddingHorizontal: 20, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel={showArchived ? 'Hide archived habits' : 'Show archived habits'}
       >
         <Archive size={16} color={theme.textSecondary} />
         <Text style={{ color: theme.textSecondary, fontFamily: 'Inter-Medium', fontSize: 13 }}>{showArchived ? 'Showing archived' : 'Show archived'}</Text>
       </Pressable>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, gap: 10 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 100, gap: spacing.md }}>
         {filteredHabits.length === 0 ? (
           <Card style={{ alignItems: 'center', paddingVertical: 40, marginTop: 20 }}>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>No habits yet</Text>
-            <Text style={[styles.emptySub, { color: theme.textSecondary }]}>Tap the + button to create your first habit</Text>
-            <Button title="Browse Library" variant="outline" onPress={() => { setEditingHabit(undefined); setShowForm(true); }} style={{ marginTop: 16 }} />
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>
+              {habits.length === 0
+                ? 'Start with one small habit'
+                : showArchived && !habits.some((habit) => habit.archived)
+                ? 'No archived habits'
+                : !showArchived && !habits.some((habit) => !habit.archived)
+                ? 'All habits are archived'
+                : 'No habits in this category'}
+            </Text>
+            <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
+              {habits.length === 0 ? 'Build a routine that fits your day.' : 'Try a different filter or create a new habit.'}
+            </Text>
+            <Button title="Create a habit" variant="outline" onPress={() => { setEditingHabit(undefined); setShowForm(true); }} style={{ marginTop: 16 }} />
           </Card>
         ) : (
           filteredHabits.map((habit, i) => {
-            const streak = calculateStreak(completions, habit.id);
-            const comp = getCompletionForHabitOnDate(habit.id, new Date().toISOString().slice(0, 10));
+            const streak = calculateStreak(getCompletedEntries(habit, completions), habit.id);
+            const comp = getCompletionForHabitOnDate(habit.id, todayKey());
             return (
               <Animated.View key={habit.id} entering={FadeInDown.delay(i * 50).duration(400)}>
                 <View>
@@ -118,15 +157,16 @@ export default function HabitsScreen() {
                     completion={comp}
                     onToggle={() => handleToggle(habit)}
                     onPress={() => setMenuHabit(habit)}
+                    readOnly={showArchived || habit.paused}
                   />
-                  {(streak > 0 || habit.reminders.length > 0) && (
+                  {(streak > 0 || habit.reminders.some((reminder) => reminder.enabled)) && (
                     <View style={styles.metaRow}>
                       {streak > 0 && (
                         <View style={styles.metaItem}>
                           <Text style={{ color: theme.warning, fontSize: 11, fontFamily: 'Inter-Medium' }}>🔥 {streak}d streak</Text>
                         </View>
                       )}
-                      {habit.reminders.length > 0 && (
+                      {habit.reminders.some((reminder) => reminder.enabled) && (
                         <Text style={{ color: theme.textMuted, fontSize: 11, fontFamily: 'Inter-Regular' }}>{habit.reminders.filter(r => r.enabled).length} reminders</Text>
                       )}
                       {habit.paused && <Text style={{ color: theme.warning, fontSize: 11 }}>Paused</Text>}
@@ -167,7 +207,7 @@ export default function HabitsScreen() {
             <MenuRow icon={<Edit3 size={20} color={theme.primary} />} label="Edit Habit" color={theme.text} onPress={() => { setEditingHabit(menuHabit); setShowForm(true); setMenuHabit(undefined); }} bg={theme.inputBg} />
             <MenuRow icon={menuHabit.paused ? <Play size={20} color={theme.success} /> : <Pause size={20} color={theme.warning} />} label={menuHabit.paused ? 'Resume Habit' : 'Pause Habit'} color={theme.text} onPress={async () => { await pauseHabit(menuHabit.id, !menuHabit.paused); setMenuHabit(undefined); }} bg={theme.inputBg} />
             <MenuRow icon={<Archive size={20} color={theme.textSecondary} />} label={menuHabit.archived ? 'Unarchive' : 'Archive'} color={theme.text} onPress={async () => { await archiveHabit(menuHabit.id, !menuHabit.archived); setMenuHabit(undefined); }} bg={theme.inputBg} />
-            <MenuRow icon={<Trash2 size={20} color={theme.error} />} label="Delete Habit" color={theme.error} onPress={() => { deleteHabit(menuHabit.id); setMenuHabit(undefined); }} bg={theme.inputBg} />
+            <MenuRow icon={<Trash2 size={20} color={theme.error} />} label="Delete Habit" color={theme.error} onPress={() => confirmDelete(menuHabit)} bg={theme.inputBg} />
           </View>
         )}
       </ModalSheet>
@@ -192,13 +232,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     paddingTop: 12,
     paddingBottom: 12,
   },
   title: {
     fontFamily: 'Inter-Bold',
-    fontSize: 26,
+    fontSize: typeScale.screenTitle,
     fontWeight: '700',
   },
   addBtn: {

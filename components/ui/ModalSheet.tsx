@@ -1,7 +1,9 @@
 import React from 'react';
-import { Modal, View, StyleSheet, Pressable, Dimensions, ScrollView } from 'react-native';
+import { Modal, View, StyleSheet, Pressable, ScrollView, Text, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
+import { radius } from '@/theme/tokens';
 
 interface ModalSheetProps {
   visible: boolean;
@@ -13,51 +15,45 @@ interface ModalSheetProps {
 
 export function ModalSheet({ visible, onClose, title, children, maxHeight = 85 }: ModalSheetProps) {
   const { theme } = useAppTheme();
-  const screenHeight = Dimensions.get('window').height;
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.surface,
-              maxHeight: screenHeight * (maxHeight / 100),
-            },
-          ]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <View style={styles.handle} />
-          {title && (
-            <View style={styles.header}>
-              <View style={styles.titlePlaceholder} />
-              <View style={styles.titleWrap}>
-                <ModalText theme={theme}>{title}</ModalText>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: theme.surface,
+                maxHeight: height * (maxHeight / 100),
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.handle} />
+            {title && (
+              <View style={styles.header}>
+                <View style={styles.titlePlaceholder} />
+                <View style={styles.titleWrap}>
+                  <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>{title}</Text>
+                </View>
+                <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
+                  <X size={22} color={theme.textSecondary} strokeWidth={2} />
+                </Pressable>
               </View>
-              <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-                <X size={22} color={theme.textSecondary} strokeWidth={2} />
-              </Pressable>
-            </View>
-          )}
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-            {children}
-          </ScrollView>
-        </Pressable>
+            )}
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+              {children}
+            </ScrollView>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );
 }
-
-function ModalText({ theme, children }: { theme: any; children: React.ReactNode }) {
-  return (
-    <View>
-      <Text style={[styles.title, { color: theme.text }]}>{children}</Text>
-    </View>
-  );
-}
-
-import { Text } from 'react-native';
 
 const styles = StyleSheet.create({
   overlay: {
@@ -66,11 +62,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
     paddingTop: 8,
-    paddingBottom: 16,
     paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   handle: {
     width: 40,
@@ -87,7 +85,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     width: '100%',
   },
-  titlePlaceholder: { width: 28 },
+  titlePlaceholder: { width: 36 },
   titleWrap: { flex: 1, alignItems: 'center' },
   title: {
     fontFamily: 'Inter-Bold',
@@ -95,7 +93,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closeBtn: {
-    width: 28,
+    width: 36,
+    height: 36,
     alignItems: 'center',
+    justifyContent: 'center',
   },
 });

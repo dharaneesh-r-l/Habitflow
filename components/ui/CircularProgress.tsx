@@ -5,10 +5,8 @@ import Animated, {
   useSharedValue,
   useAnimatedProps,
   withTiming,
-  withRepeat,
-  useAnimatedStyle,
   Easing,
-  cancelAnimation,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import { useAppTheme } from '@/theme/ThemeContext';
 
@@ -35,13 +33,17 @@ export function CircularProgress({
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const animatedProgress = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const normalizedProgress = Math.max(0, Math.min(100, progress));
 
   useEffect(() => {
-    animatedProgress.value = withTiming(progress, {
+    animatedProgress.value = reduceMotion
+      ? normalizedProgress
+      : withTiming(normalizedProgress, {
       duration: 1000,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
-  }, [progress]);
+  }, [animatedProgress, normalizedProgress, reduceMotion]);
 
   const animatedProps = useAnimatedProps(() => {
     const strokeDashoffset = circumference - (animatedProgress.value / 100) * circumference;
@@ -49,7 +51,13 @@ export function CircularProgress({
   });
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
+    <View
+      style={[styles.container, { width: size, height: size }]}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(normalizedProgress) }}
+      accessibilityLabel="Daily completion"
+    >
       <Svg width={size} height={size} style={styles.svg}>
         <Circle
           cx={size / 2}

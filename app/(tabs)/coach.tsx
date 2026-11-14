@@ -1,14 +1,13 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Sparkles, TrendingUp, AlertTriangle, Lightbulb, Brain, Target, Zap } from 'lucide-react-native';
+import { Sparkles, TrendingUp, Lightbulb, Target, Zap } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/IconHelper';
-import { calculateStreak, getLast7Days, dateKey } from '@/utils/date';
+import { getLast7Days, dateKey, getCompletedEntries, isCompletionComplete } from '@/utils/date';
 
 export default function CoachScreen() {
   const { theme } = useAppTheme();
@@ -24,7 +23,7 @@ export default function CoachScreen() {
     // Top performing habit
     const perfData = activeHabits.map((h) => {
       const last7 = getLast7Days();
-      const comps = completions.filter((c) => c.habitId === h.id && last7.includes(c.date));
+      const comps = getCompletedEntries(h, completions).filter((c) => last7.includes(c.date));
       const scheduledDays = last7.filter((dKey) => {
         const date = new Date(dKey + 'T00:00:00');
         return getScheduledHabitsForDate(date).some((s) => s.id === h.id);
@@ -87,7 +86,12 @@ export default function CoachScreen() {
     const morningHabits = activeHabits.filter((h) => h.routine === 'morning');
     if (morningHabits.length > 0) {
       const todayKey = dateKey(new Date());
-      const morningDone = morningHabits.filter((h) => completions.some((c) => c.habitId === h.id && c.date === todayKey));
+      const morningDone = morningHabits.filter((habit) =>
+        isCompletionComplete(
+          habit,
+          completions.find((completion) => completion.habitId === habit.id && completion.date === todayKey)
+        )
+      );
       if (morningDone.length === morningHabits.length) {
         result.push({
           type: 'success',
@@ -145,20 +149,15 @@ export default function CoachScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
         {/* AI Coach header */}
         <Animated.View entering={FadeInDown.duration(500)}>
-          <LinearGradient
-            colors={[theme.primary, theme.accent]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.coachHeader}
-          >
-            <View style={styles.coachAvatar}>
-              <Sparkles size={32} color="#fff" />
+          <View style={[styles.coachHeader, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <View style={[styles.coachAvatar, { backgroundColor: theme.primaryDim }]}>
+              <Sparkles size={28} color={theme.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.coachTitle}>AI Coach</Text>
-              <Text style={styles.coachSub}>Personalized insights from your habits</Text>
+              <Text style={[styles.coachTitle, { color: theme.text }]}>Habit Coach</Text>
+              <Text style={[styles.coachSub, { color: theme.textSecondary }]}>Personalized insights from your routines</Text>
             </View>
-          </LinearGradient>
+          </View>
         </Animated.View>
 
         {/* Stats summary */}
@@ -248,6 +247,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     borderRadius: 20,
+    borderWidth: 1,
     padding: 20,
     marginBottom: 16,
     marginTop: 12,
@@ -256,7 +256,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -264,12 +263,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
   },
   coachSub: {
     fontFamily: 'Inter-Regular',
     fontSize: 13,
-    color: 'rgba(255,255,255,0.85)',
     marginTop: 2,
   },
   summaryRow: {

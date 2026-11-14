@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Share, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Share, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Moon, Sun, Bell, Vibrate, Calendar, Download, Trash2, Info,
-  ChevronRight, Award, Flame, Zap, Target, User, Settings,
+  ChevronRight, Flame, Zap, Target, User,
 } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Icon } from '@/components/IconHelper';
 import { getLevelFromXP } from '@/utils/date';
+import { spacing, typeScale } from '@/theme/tokens';
 
 export default function ProfileScreen() {
   const { theme, mode, toggle } = useAppTheme();
@@ -19,7 +20,6 @@ export default function ProfileScreen() {
   const stats = useHabitStore((s) => s.stats);
   const achievements = useHabitStore((s) => s.achievements);
   const habits = useHabitStore((s) => s.habits);
-  const completions = useHabitStore((s) => s.completions);
   const updatePreferences = useHabitStore((s) => s.updatePreferences);
   const resetAllData = useHabitStore((s) => s.resetAllData);
   const exportData = useHabitStore((s) => s.exportData);
@@ -34,7 +34,7 @@ export default function ProfileScreen() {
     try {
       const data = exportData();
       await Share.share({ message: data, title: 'HabitFlow Data Export' });
-    } catch (e) {
+    } catch {
       Alert.alert('Export failed', 'Could not share data.');
     }
   };
@@ -44,9 +44,20 @@ export default function ProfileScreen() {
     resetAllData();
   };
 
+  const handleNotificationPreference = async (enabled: boolean) => {
+    try {
+      await updatePreferences({ notificationsEnabled: enabled });
+    } catch {
+      Alert.alert(
+        'Notifications unavailable',
+        'Allow HabitFlow to send notifications in your device settings to receive habit reminders.'
+      );
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 100 }}>
         <Text style={[styles.title, { color: theme.text }]}>Profile</Text>
 
         {/* Profile card */}
@@ -95,7 +106,7 @@ export default function ProfileScreen() {
             icon={mode === 'dark' ? <Moon size={20} color={theme.primary} /> : <Sun size={20} color={theme.warning} />}
             label="Dark Theme"
             theme={theme}
-            right={<Switch value={mode === 'dark'} onValueChange={toggle} trackColor={{ true: theme.primary, false: theme.border }} />}
+            right={<Switch accessibilityLabel="Dark theme" value={mode === 'dark'} onValueChange={toggle} trackColor={{ true: theme.primary, false: theme.border }} />}
           />
         </Card>
 
@@ -106,14 +117,15 @@ export default function ProfileScreen() {
             icon={<Bell size={20} color={theme.accent} />}
             label="Notifications"
             theme={theme}
-            right={<Switch value={preferences.notificationsEnabled} onValueChange={(v) => updatePreferences({ notificationsEnabled: v })} trackColor={{ true: theme.primary, false: theme.border }} />}
+            helper="Schedule reminders for active habits."
+            right={<Switch accessibilityLabel="Habit reminders" value={preferences.notificationsEnabled} onValueChange={handleNotificationPreference} trackColor={{ true: theme.primary, false: theme.border }} />}
           />
           <SettingDivider theme={theme} />
           <SettingRow
             icon={<Vibrate size={20} color={theme.primary} />}
             label="Haptic Feedback"
             theme={theme}
-            right={<Switch value={preferences.hapticsEnabled} onValueChange={(v) => updatePreferences({ hapticsEnabled: v })} trackColor={{ true: theme.primary, false: theme.border }} />}
+            right={<Switch accessibilityLabel="Haptic feedback" value={preferences.hapticsEnabled} onValueChange={(v) => updatePreferences({ hapticsEnabled: v })} trackColor={{ true: theme.primary, false: theme.border }} />}
           />
           <SettingDivider theme={theme} />
           <SettingRow
@@ -121,7 +133,11 @@ export default function ProfileScreen() {
             label="Week Starts On"
             theme={theme}
             right={
-              <Pressable onPress={() => updatePreferences({ weekStart: preferences.weekStart === 0 ? 1 : 0 })}>
+              <Pressable
+                onPress={() => updatePreferences({ weekStart: preferences.weekStart === 0 ? 1 : 0 })}
+                accessibilityRole="button"
+                accessibilityLabel={`Week starts on ${preferences.weekStart === 0 ? 'Sunday' : 'Monday'}. Change week start day`}
+              >
                 <Text style={[styles.settingValue, { color: theme.textSecondary }]}>{preferences.weekStart === 0 ? 'Sunday' : 'Monday'}</Text>
               </Pressable>
             }
@@ -237,12 +253,15 @@ function ProfileNameInput({ theme, value, onSave }: { theme: any; value: string;
   );
 }
 
-function SettingRow({ icon, label, theme, right }: { icon: React.ReactNode; label: string; theme: any; right?: React.ReactNode }) {
+function SettingRow({ icon, label, theme, right, helper }: { icon: React.ReactNode; label: string; theme: any; right?: React.ReactNode; helper?: string }) {
   return (
     <View style={styles.settingRow}>
       <View style={styles.settingLeft}>
         {icon}
-        <Text style={[styles.settingLabel, { color: theme.text }]}>{label}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.settingLabel, { color: theme.text }]}>{label}</Text>
+          {helper && <Text style={[styles.settingHelper, { color: theme.textMuted }]}>{helper}</Text>}
+        </View>
       </View>
       {right}
     </View>
@@ -276,13 +295,11 @@ function AboutRow({ label, value, theme }: { label: string; value: string; theme
   );
 }
 
-import { TextInput } from 'react-native';
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   title: {
     fontFamily: 'Inter-Bold',
-    fontSize: 26,
+    fontSize: typeScale.screenTitle,
     fontWeight: '700',
     paddingTop: 12,
     paddingBottom: 16,
@@ -346,6 +363,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  settingHelper: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 3,
+  },
   settingValue: {
     fontFamily: 'Inter-Medium',
     fontSize: 14,
@@ -377,6 +400,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   divider: {
     height: 1,

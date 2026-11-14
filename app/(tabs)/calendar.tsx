@@ -16,17 +16,18 @@ import {
   addMonths,
   isSameDay,
   isSameMonth,
+  isAfter,
+  startOfDay,
   subMonths,
-  addDays,
 } from 'date-fns';
-import { dateKey } from '@/utils/date';
+import { dateKey, isCompletionComplete } from '@/utils/date';
+import { spacing, typeScale } from '@/theme/tokens';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function CalendarScreen() {
   const { theme } = useAppTheme();
   const completions = useHabitStore((s) => s.completions);
-  const habits = useHabitStore((s) => s.habits);
   const getScheduledHabitsForDate = useHabitStore((s) => s.getScheduledHabitsForDate);
   const getCompletionsForDate = useHabitStore((s) => s.getCompletionsForDate);
   const getCompletionRateForDate = useHabitStore((s) => s.getCompletionRateForDate);
@@ -45,13 +46,24 @@ export default function CalendarScreen() {
   const selectedCompletions = getCompletionsForDate(selectedKey);
   const selectedScheduled = getScheduledHabitsForDate(selectedDate);
   const selectedRate = getCompletionRateForDate(selectedKey);
+  const selectedCompletedCount = selectedScheduled.filter((habit) =>
+    isCompletionComplete(
+      habit,
+      selectedCompletions.find((completion) => completion.habitId === habit.id)
+    )
+  ).length;
 
   const getDayColor = (date: Date) => {
     if (!isSameMonth(date, currentMonth)) return 'transparent';
     const dKey = dateKey(date);
     const scheduled = getScheduledHabitsForDate(date);
     if (scheduled.length === 0) return theme.surfaceAlt;
-    const completed = completions.filter((c) => c.date === dKey && scheduled.some((h) => h.id === c.habitId));
+    const completed = scheduled.filter((habit) =>
+      isCompletionComplete(
+        habit,
+        completions.find((completion) => completion.habitId === habit.id && completion.date === dKey)
+      )
+    );
     const rate = completed.length / scheduled.length;
     if (rate === 0) return theme.surfaceAlt;
     if (rate <= 0.33) return theme.primary + '40';
@@ -68,17 +80,17 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 100 }}>
         <Text style={[styles.title, { color: theme.text }]}>Calendar</Text>
 
         {/* Month navigation */}
         <Card style={{ marginBottom: 16 }}>
           <View style={styles.monthNav}>
-            <Pressable onPress={() => setCurrentMonth(subMonths(currentMonth, 1))} hitSlop={12}>
+            <Pressable onPress={() => setCurrentMonth(subMonths(currentMonth, 1))} hitSlop={12} accessibilityRole="button" accessibilityLabel="Previous month">
               <ChevronLeft size={24} color={theme.text} />
             </Pressable>
             <Text style={[styles.monthLabel, { color: theme.text }]}>{format(currentMonth, 'MMMM yyyy')}</Text>
-            <Pressable onPress={() => setCurrentMonth(addMonths(currentMonth, 1))} hitSlop={12}>
+            <Pressable onPress={() => setCurrentMonth(addMonths(currentMonth, 1))} hitSlop={12} accessibilityRole="button" accessibilityLabel="Next month">
               <ChevronRight size={24} color={theme.text} />
             </Pressable>
           </View>
@@ -88,7 +100,7 @@ export default function CalendarScreen() {
             {WEEKDAYS.map((d, i) => {
               const dayIndex = preferences.weekStart === 1 ? (i + 1) % 7 : i;
               return (
-                <Text key={i} style={[styles.weekDayText, { color: theme.textMuted }]}>{WEEKDAYS[dayIndex][0]}</Text>
+                <Text key={i} style={[styles.weekDayText, { color: theme.textMuted }]}>{WEEKDAYS[dayIndex]}</Text>
               );
             })}
           </View>
@@ -105,6 +117,9 @@ export default function CalendarScreen() {
                 <Pressable
                   key={i}
                   onPress={() => setSelectedDate(date)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${format(date, 'EEEE, MMMM d')}, ${getCompletionRateForDate(dateKey(date))}% complete`}
+                  accessibilityState={{ selected: isSelected }}
                   style={[
                     styles.dayCell,
                     {
@@ -149,7 +164,7 @@ export default function CalendarScreen() {
           <Text style={[styles.ratePercent, { color: theme.text }]}>{selectedRate}%</Text>
           <Text style={[styles.rateLabel, { color: theme.textSecondary }]}>completion rate</Text>
           <Text style={[styles.rateDetail, { color: theme.textMuted, marginTop: 8 }]}>
-            {selectedCompletions.length} of {selectedScheduled.length} habits completed
+            {selectedCompletedCount} of {selectedScheduled.length} habits completed
           </Text>
         </Card>
 
@@ -162,7 +177,15 @@ export default function CalendarScreen() {
           ) : (
             selectedScheduled.map((habit) => {
               const comp = selectedCompletions.find((c) => c.habitId === habit.id);
-              const isComplete = !!comp;
+              const isComplete = isCompletionComplete(habit, comp);
+              const isFuture = isAfter(startOfDay(selectedDate), startOfDay(new Date()));
+              const status = isComplete
+                ? 'Done'
+                : comp
+                ? `${Math.min(comp.value, habit.target)}/${habit.target} ${habit.unit}`
+                : isFuture
+                ? 'Upcoming'
+                : 'Missed';
               return (
                 <View
                   key={habit.id}
@@ -178,7 +201,7 @@ export default function CalendarScreen() {
                     </View>
                   ) : (
                     <View style={[styles.statusBadge, { backgroundColor: theme.surfaceAlt }]}>
-                      <Text style={[styles.statusText, { color: theme.textMuted }]}>Missed</Text>
+                      <Text style={[styles.statusText, { color: isFuture ? theme.textSecondary : theme.textMuted }]} numberOfLines={1}>{status}</Text>
                     </View>
                   )}
                 </View>
@@ -195,7 +218,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   title: {
     fontFamily: 'Inter-Bold',
-    fontSize: 26,
+    fontSize: typeScale.screenTitle,
     fontWeight: '700',
     paddingTop: 12,
     paddingBottom: 16,
@@ -218,7 +241,7 @@ const styles = StyleSheet.create({
   },
   weekDayText: {
     fontFamily: 'Inter-Medium',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '500',
     width: 36,
     textAlign: 'center',

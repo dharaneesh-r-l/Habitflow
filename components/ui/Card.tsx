@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle, Pressable } from 'react-native';
+import { View, StyleSheet, ViewStyle, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '@/theme/ThemeContext';
+import { radius } from '@/theme/tokens';
 
 interface CardProps {
   children: React.ReactNode;
@@ -16,22 +17,22 @@ export function Card({ children, style, gradient, onPress, padding = 16 }: CardP
 
   const content = gradient ? (
     <LinearGradient
-      colors={[theme.primary, theme.accent]}
+      colors={[theme.gradientStart, theme.gradientEnd]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[styles.card, { padding, borderRadius: 20 }, style]}
+      style={[styles.card, { padding, borderRadius: radius.card }, style]}
     >
       {children}
     </LinearGradient>
   ) : (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder, padding, borderRadius: 20 }, style]}>
+    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder, padding, borderRadius: radius.card, shadowColor: theme.shadow }, style]}>
       {children}
     </View>
   );
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={(state) => ({ opacity: state.pressed ? 0.85 : 1, ...(style as object) })}>
+      <Pressable onPress={onPress} accessibilityRole="button" style={(state) => ({ opacity: state.pressed ? 0.88 : 1 })}>
         {content}
       </Pressable>
     );
@@ -43,5 +44,9 @@ const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
     overflow: 'hidden',
+    elevation: 2,
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
   },
 });

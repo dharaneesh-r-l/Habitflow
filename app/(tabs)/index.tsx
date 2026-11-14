@@ -1,18 +1,18 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import { Flame, Zap, Bell, ChevronRight, Sparkles, Sunrise, Sun, Moon, Star, TrendingUp } from 'lucide-react-native';
+import { Flame, Zap, Bell, Sparkles, Sunrise, Sun, Moon, Star, TrendingUp, Circle } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
 import { Card } from '@/components/ui/Card';
 import { CircularProgress } from '@/components/ui/CircularProgress';
 import { HabitItem } from '@/components/HabitItem';
 import { Icon } from '@/components/IconHelper';
-import { RoutinePeriod } from '@/types';
-import { getGreeting, formatDateLabel, todayKey, getLevelFromXP } from '@/utils/date';
+import { HabitType, RoutinePeriod } from '@/types';
+import { getGreeting, formatDateLabel, todayKey, getLevelFromXP, isCompletionComplete } from '@/utils/date';
 import { DAILY_CHALLENGES } from '@/data/achievements';
+import { spacing } from '@/theme/tokens';
 
 const ROUTINE_ICONS: Record<RoutinePeriod, any> = {
   morning: Sunrise,
@@ -34,28 +34,26 @@ const MOTIVATIONAL = [
 export default function HomeScreen() {
   const { theme } = useAppTheme();
   const habits = useHabitStore((s) => s.habits);
-  const completions = useHabitStore((s) => s.completions);
   const stats = useHabitStore((s) => s.stats);
   const preferences = useHabitStore((s) => s.preferences);
   const toggleCompletion = useHabitStore((s) => s.toggleCompletion);
   const logCompletion = useHabitStore((s) => s.logCompletion);
+  const removeCompletion = useHabitStore((s) => s.removeCompletion);
   const getTodayCompletionRate = useHabitStore((s) => s.getTodayCompletionRate);
   const getScheduledHabitsForDate = useHabitStore((s) => s.getScheduledHabitsForDate);
   const getCompletionForHabitOnDate = useHabitStore((s) => s.getCompletionForHabitOnDate);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const today = new Date();
+  const localNow = new Date();
   const dKey = todayKey();
+  const today = new Date(`${dKey}T12:00:00`);
+  const currentMinuteOfDay = localNow.getHours() * 60 + localNow.getMinutes();
   const completionRate = getTodayCompletionRate();
   const levelInfo = getLevelFromXP(stats.xp);
-  const motivational = useMemo(() => MOTIVATIONAL[Math.floor(Math.random() * MOTIVATIONAL.length)], [dKey]);
+  const dailySeed = dKey.replace(/-/g, '').split('').reduce((sum, digit) => sum + Number(digit), 0);
+  const motivational = MOTIVATIONAL[dailySeed % MOTIVATIONAL.length];
 
-  const scheduledHabits = useMemo(
-    () => getScheduledHabitsForDate(today).sort((a, b) => a.order - b.order),
-    [habits, getScheduledHabitsForDate]
-  );
+  const scheduledHabits = getScheduledHabitsForDate(today).sort((a, b) => a.order - b.order);
 
-  const routines = useMemo(() => {
+  const routines = (() => {
     const result: Record<RoutinePeriod, typeof scheduledHabits> = {
       morning: [],
       afternoon: [],
@@ -66,10 +64,19 @@ export default function HomeScreen() {
       if (h.routine) result[h.routine].push(h);
     });
     return result;
-  }, [scheduledHabits]);
+  })();
+
+  const routineGroups = (() => {
+    const groups: { period: RoutinePeriod | 'anytime'; habits: typeof scheduledHabits }[] =
+      (['morning', 'afternoon', 'evening', 'night'] as RoutinePeriod[])
+      .filter((period) => routines[period].length > 0)
+      .map((period) => ({ period, habits: routines[period] }));
+    const anytimeHabits = scheduledHabits.filter((habit) => !habit.routine);
+    if (anytimeHabits.length > 0) groups.push({ period: 'anytime' as const, habits: anytimeHabits });
+    return groups;
+  })();
 
   const upcomingReminders = useMemo(() => {
-    const now = today.getHours() * 60 + today.getMinutes();
     const all: { habitName: string; time: string; icon: string; color: string }[] = [];
     habits.forEach((h) => {
       if (h.archived || h.paused) return;
@@ -77,42 +84,45 @@ export default function HomeScreen() {
         if (!r.enabled) return;
         const [hh, mm] = r.time.split(':').map(Number);
         const tMin = hh * 60 + mm;
-        if (tMin > now) {
+        if (tMin > currentMinuteOfDay) {
           all.push({ habitName: h.name, time: r.time, icon: h.icon, color: h.color });
         }
       });
     });
     return all.sort((a, b) => a.time.localeCompare(b.time)).slice(0, 4);
-  }, [habits]);
+  }, [habits, currentMinuteOfDay]);
 
-  const todayCompletedCount = scheduledHabits.filter((h) => getCompletionForHabitOnDate(h.id, dKey)).length;
+  const todayCompletedCount = scheduledHabits.filter((habit) =>
+    isCompletionComplete(habit, getCompletionForHabitOnDate(habit.id, dKey))
+  ).length;
   const dailyChallenge = DAILY_CHALLENGES[0];
   const challengeProgress = Math.min(100, (todayCompletedCount / dailyChallenge.target) * 100);
+  const challengeClaimed = stats.dailyChallengeClaimedDate === dKey;
 
-  const handleToggle = useCallback(
-    (habitId: string, type: string, target: number, currentVal: number | undefined) => {
-      if (type === 'boolean') {
-        toggleCompletion(habitId);
-      } else {
-        const next = currentVal ? currentVal + Math.max(1, Math.round(target * 0.1)) : Math.max(1, Math.round(target * 0.25));
-        const final = Math.min(next, target);
-        logCompletion(habitId, final);
+  const handleToggle = (
+    habitId: string,
+    type: HabitType,
+    target: number,
+    currentVal: number | undefined
+  ) => {
+    if (type === 'boolean') {
+      toggleCompletion(habitId);
+    } else {
+      if (currentVal !== undefined && currentVal >= target) {
+        removeCompletion(habitId, dKey);
+        return;
       }
-    },
-    [toggleCompletion, logCompletion]
-  );
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 500);
+      const next = currentVal ? currentVal + Math.max(1, Math.round(target * 0.1)) : Math.max(1, Math.round(target * 0.25));
+      const final = Math.min(next, target);
+      logCompletion(habitId, final);
+    }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 100 }}
       >
         {/* Header */}
         <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
@@ -154,14 +164,14 @@ export default function HomeScreen() {
 
         {/* Level card */}
         <Animated.View entering={FadeInDown.delay(150).duration(500)}>
-          <Card gradient style={{ marginBottom: 16, padding: 16 }}>
+          <Card style={{ marginBottom: 16, padding: 16 }}>
             <View style={styles.levelRow}>
               <View>
-                <Text style={styles.levelLabel}>LEVEL {levelInfo.level}</Text>
-                <Text style={styles.levelXP}>{levelInfo.currentLevelXP} / {levelInfo.nextLevelXP} XP</Text>
+                <Text style={[styles.levelLabel, { color: theme.text }]}>LEVEL {levelInfo.level}</Text>
+                <Text style={[styles.levelXP, { color: theme.textSecondary }]}>{levelInfo.currentLevelXP} / {levelInfo.nextLevelXP} XP</Text>
               </View>
-              <View style={styles.levelBar}>
-                <View style={[styles.levelFill, { width: `${levelInfo.progress * 100}%` }]} />
+              <View style={[styles.levelBar, { backgroundColor: theme.surfaceAlt }]}>
+                <View style={[styles.levelFill, { width: `${levelInfo.progress * 100}%`, backgroundColor: theme.primary }]} />
               </View>
             </View>
           </Card>
@@ -184,68 +194,61 @@ export default function HomeScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.challengeTitle, { color: theme.text }]}>{dailyChallenge.title}</Text>
-                <Text style={[styles.challengeXP, { color: theme.textSecondary }]}>+{dailyChallenge.xp} XP</Text>
+                <Text style={[styles.challengeXP, { color: theme.textSecondary }]}>
+                  {challengeClaimed
+                    ? `Daily reward claimed · +${dailyChallenge.xp} XP`
+                    : `+${dailyChallenge.xp} XP · ${Math.min(todayCompletedCount, dailyChallenge.target)} of ${dailyChallenge.target} habits`}
+                </Text>
+                <View style={[styles.challengeBar, { backgroundColor: theme.surfaceAlt }]}>
+                  <View style={[styles.challengeFill, { width: `${challengeProgress}%`, backgroundColor: theme.accent }]} />
+                </View>
               </View>
               <Text style={[styles.challengeProgress, { color: theme.primary }]}>{Math.round(challengeProgress)}%</Text>
             </View>
           </Card>
         </Animated.View>
 
-        {/* Today's habits */}
+        {/* Today&apos;s habits */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Today's Habits</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Today&apos;s Habits</Text>
           <Text style={[styles.sectionCount, { color: theme.textSecondary }]}>{scheduledHabits.length}</Text>
         </View>
-        <View style={styles.habitList}>
-          {scheduledHabits.length === 0 ? (
+        {scheduledHabits.length === 0 ? (
+          <View style={styles.habitList}>
             <Card style={{ marginBottom: 16, alignItems: 'center', paddingVertical: 28 }}>
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No habits scheduled for today</Text>
               <Text style={[styles.emptySub, { color: theme.textMuted }]}>Add habits from the Habits tab</Text>
             </Card>
-          ) : (
-            scheduledHabits.map((habit, i) => (
-              <Animated.View key={habit.id} entering={FadeInDown.delay(300 + i * 50).duration(400)} style={{ marginBottom: 10 }}>
-                <HabitItem
-                  habit={habit}
-                  completion={getCompletionForHabitOnDate(habit.id, dKey)}
-                  onToggle={() =>
-                    handleToggle(habit.id, habit.type, habit.target, getCompletionForHabitOnDate(habit.id, dKey)?.value)
-                  }
-                />
-              </Animated.View>
-            ))
-          )}
-        </View>
-
-        {/* Routines */}
-        {(['morning', 'afternoon', 'evening', 'night'] as RoutinePeriod[]).map((period) => {
-          const periodHabits = routines[period];
-          if (periodHabits.length === 0) return null;
-          const IconComp = ROUTINE_ICONS[period];
-          return (
-            <View key={period}>
-              <View style={[styles.routineHeader, { marginTop: 16 }]}>
-                <IconComp size={18} color={theme.primary} />
-                <Text style={[styles.routineTitle, { color: theme.text }]}>{period.charAt(0).toUpperCase() + period.slice(1)} Routine</Text>
-                <Text style={[styles.routineCount, { color: theme.textSecondary }]}>{periodHabits.length}</Text>
+          </View>
+        ) : (
+          routineGroups.map(({ period, habits: groupHabits }, groupIndex) => {
+            const IconComp = period === 'anytime' ? Circle : ROUTINE_ICONS[period];
+            const title = period === 'anytime' ? 'Anytime' : `${period.charAt(0).toUpperCase()}${period.slice(1)} routine`;
+            return (
+              <View key={period}>
+                <View style={[styles.routineHeader, { marginTop: groupIndex === 0 ? 0 : 16 }]}>
+                  <IconComp size={18} color={theme.primary} />
+                  <Text style={[styles.routineTitle, { color: theme.text }]}>{title}</Text>
+                  <Text style={[styles.routineCount, { color: theme.textSecondary }]}>{groupHabits.length}</Text>
+                </View>
+                <View style={styles.habitList}>
+                  {groupHabits.map((habit, habitIndex) => (
+                    <Animated.View key={habit.id} entering={FadeInDown.delay(300 + groupIndex * 50 + habitIndex * 35).duration(350)} style={{ marginBottom: 8 }}>
+                      <HabitItem
+                        habit={habit}
+                        completion={getCompletionForHabitOnDate(habit.id, dKey)}
+                        onToggle={() =>
+                          handleToggle(habit.id, habit.type, habit.target, getCompletionForHabitOnDate(habit.id, dKey)?.value)
+                        }
+                        compact
+                      />
+                    </Animated.View>
+                  ))}
+                </View>
               </View>
-              <View style={styles.habitList}>
-                {periodHabits.map((habit) => (
-                  <View key={habit.id} style={{ marginBottom: 8 }}>
-                    <HabitItem
-                      habit={habit}
-                      completion={getCompletionForHabitOnDate(habit.id, dKey)}
-                      onToggle={() =>
-                        handleToggle(habit.id, habit.type, habit.target, getCompletionForHabitOnDate(habit.id, dKey)?.value)
-                      }
-                      compact
-                    />
-                  </View>
-                ))}
-              </View>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
 
         {/* Upcoming reminders */}
         {upcomingReminders.length > 0 && (
@@ -284,9 +287,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
   greeting: {
     fontFamily: 'Inter-Regular',
@@ -301,7 +303,7 @@ const styles = StyleSheet.create({
   progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 14,
   },
   progressPercent: {
     fontFamily: 'Inter-Bold',
@@ -350,26 +352,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
   },
   levelXP: {
     fontFamily: 'Inter-Regular',
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
     marginTop: 2,
   },
   levelBar: {
     flex: 1,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.25)',
     marginLeft: 20,
     overflow: 'hidden',
   },
   levelFill: {
     height: '100%',
     borderRadius: 4,
-    backgroundColor: '#fff',
   },
   quoteBox: {
     flexDirection: 'row',
@@ -408,6 +406,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 12,
     marginTop: 2,
+  },
+  challengeBar: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  challengeFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   challengeProgress: {
     fontFamily: 'Inter-Bold',
@@ -449,8 +457,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 4,
     marginBottom: 10,
+    paddingHorizontal: 4,
   },
   routineTitle: {
     flex: 1,

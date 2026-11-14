@@ -1,8 +1,7 @@
 import React from 'react';
 import { StyleSheet, Pressable, Text, ViewStyle, ActivityIndicator } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '@/theme/ThemeContext';
-import { pressedOpacity } from '@/utils/style';
+import { radius } from '@/theme/tokens';
 
 interface ButtonProps {
   title: string;
@@ -33,37 +32,23 @@ export function Button({
     lg: { paddingVertical: 18, paddingHorizontal: 32, fontSize: 17 },
   };
 
-  if (variant === 'primary' && !disabled) {
-    return (
-      <Pressable onPress={onPress} disabled={disabled || loading} style={(state) => pressedOpacity(state.pressed, [styles.button, style])}>
-        <LinearGradient
-          colors={[theme.primary, theme.accent]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[styles.button, { paddingVertical: sizeStyles[size].paddingVertical, paddingHorizontal: sizeStyles[size].paddingHorizontal, borderRadius: 14 }]}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              {icon}
-              <Text style={[styles.text, { fontSize: sizeStyles[size].fontSize, color: '#fff' }]}>{title}</Text>
-            </>
-          )}
-        </LinearGradient>
-      </Pressable>
-    );
-  }
-
   const bg =
-    variant === 'secondary'
+    variant === 'primary'
+      ? theme.primary
+      : variant === 'secondary'
       ? theme.surfaceAlt
       : variant === 'outline'
       ? 'transparent'
       : 'transparent';
 
   const textColor =
-    variant === 'outline' ? theme.primary : variant === 'ghost' ? theme.textSecondary : theme.text;
+    variant === 'primary'
+      ? '#fff'
+      : variant === 'outline'
+      ? theme.primary
+      : variant === 'ghost'
+      ? theme.textSecondary
+      : theme.text;
 
   return (
     <Pressable
@@ -73,13 +58,15 @@ export function Button({
         ...styles.button,
         backgroundColor: bg,
         borderColor: variant === 'outline' ? theme.primary : 'transparent',
-        borderWidth: variant === 'outline' ? 1.5 : 0,
+        borderWidth: variant === 'outline' ? 1 : 0,
         paddingVertical: sizeStyles[size].paddingVertical,
         paddingHorizontal: sizeStyles[size].paddingHorizontal,
-        borderRadius: 14,
+        borderRadius: radius.md,
         opacity: state.pressed ? 0.7 : disabled ? 0.4 : 1,
-        ...(style as object),
+        ...style,
       })}
+      accessibilityRole="button"
+      accessibilityLabel={title}
     >
       {loading ? (
         <ActivityIndicator color={textColor} size="small" />
@@ -99,6 +86,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    borderRadius: radius.md,
+    minHeight: 44,
+    opacity: 1,
   },
   text: {
     fontFamily: 'Inter-Medium',

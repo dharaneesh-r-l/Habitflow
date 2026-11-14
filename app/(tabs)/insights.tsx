@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, useWindowDimensions, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Svg, Rect, Line, Text as SvgText, Path } from 'react-native-svg';
+import { Svg, Rect, Line, Text as SvgText } from 'react-native-svg';
 import { Flame, Trophy, Target, CheckCircle2, TrendingUp } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
@@ -12,9 +12,10 @@ import {
   getLast30Days,
   calculateStreak,
   calculateLongestStreak,
-  dateKey,
-  subDays,
+  getCompletedEntries,
+  isCompletionComplete,
 } from '@/utils/date';
+import { spacing, typeScale } from '@/theme/tokens';
 
 type TabRange = 'week' | 'month';
 
@@ -27,49 +28,77 @@ export default function InsightsScreen() {
   const [range, setRange] = useState<TabRange>('week');
 
   const days = range === 'week' ? getLast7Days() : getLast30Days();
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = screenWidth - 56;
+  const { width: screenWidth } = useWindowDimensions();
+  const chartViewportWidth = Math.max(220, screenWidth - 80);
+  const chartWidth = range === 'week' ? chartViewportWidth : Math.max(chartViewportWidth, days.length * 24);
   const chartHeight = 180;
-  const barWidth = chartWidth / days.length - 6;
+  const barWidth = Math.max(4, (chartWidth - 20) / days.length - 6);
 
-  const dailyRates = useMemo(() => {
+  const dailyData = useMemo(() => {
     return days.map((dKey) => {
       const date = new Date(dKey + 'T00:00:00');
       const scheduled = getScheduledHabitsForDate(date);
-      if (scheduled.length === 0) return 0;
-      const completed = completions.filter((c) => c.date === dKey && scheduled.some((h) => h.id === c.habitId));
-      return Math.round((completed.length / scheduled.length) * 100);
+      if (scheduled.length === 0) return { date: dKey, rate: 0, hasScheduledHabits: false };
+      const completed = scheduled.filter((habit) =>
+        isCompletionComplete(
+          habit,
+          completions.find((completion) => completion.habitId === habit.id && completion.date === dKey)
+        )
+      );
+      return {
+        date: dKey,
+        rate: Math.round((completed.length / scheduled.length) * 100),
+        hasScheduledHabits: true,
+      };
     });
   }, [days, completions, getScheduledHabitsForDate]);
 
-  const avgRate = Math.round(dailyRates.reduce((a, b) => a + b, 0) / days.length);
-  const bestDay = Math.max(...dailyRates);
-  const totalInRange = completions.filter((c) => days.includes(c.date)).length;
+  const dailyRates = dailyData.map((item) => item.rate);
+  const daysWithHabits = dailyData.filter((item) => item.hasScheduledHabits);
+  const avgRate = daysWithHabits.length > 0
+    ? Math.round(daysWithHabits.reduce((total, item) => total + item.rate, 0) / daysWithHabits.length)
+    : 0;
+  const totalInRange = dailyData.reduce((total, item) => {
+    if (!item.hasScheduledHabits) return total;
+    const scheduled = getScheduledHabitsForDate(new Date(item.date + 'T00:00:00'));
+    return total + scheduled.filter((habit) =>
+      isCompletionComplete(
+        habit,
+        completions.find((completion) => completion.habitId === habit.id && completion.date === item.date)
+      )
+    ).length;
+  }, 0);
 
   // Heatmap data - 30 days
   const heatmapDays = getLast30Days();
-  const heatmapColors = heatmapDays.map((dKey) => {
+  const heatmapRates = heatmapDays.map((dKey) => {
     const date = new Date(dKey + 'T00:00:00');
     const scheduled = getScheduledHabitsForDate(date);
     if (scheduled.length === 0) return 0;
-    const completed = completions.filter((c) => c.date === dKey && scheduled.some((h) => h.id === c.habitId));
+    const completed = scheduled.filter((habit) =>
+      isCompletionComplete(
+        habit,
+        completions.find((completion) => completion.habitId === habit.id && completion.date === dKey)
+      )
+    );
     return completed.length / scheduled.length;
   });
 
   // Habit performance
   const habitPerformance = useMemo(() => {
-    const activeHabits = habits.filter((h) => !h.archived);
+    const activeHabits = habits.filter((h) => !h.archived && !h.paused);
     return activeHabits
       .map((h) => {
-        const habitComps = completions.filter((c) => c.habitId === h.id && days.includes(c.date));
+        const habitComps = getCompletedEntries(h, completions).filter((c) => days.includes(c.date));
         const scheduledDays = days.filter((dKey) => {
           const date = new Date(dKey + 'T00:00:00');
           const scheduled = getScheduledHabitsForDate(date);
           return scheduled.some((s) => s.id === h.id);
         });
         const rate = scheduledDays.length > 0 ? Math.round((habitComps.length / scheduledDays.length) * 100) : 0;
-        const streak = calculateStreak(completions, h.id);
-        const longest = calculateLongestStreak(completions, h.id);
+        const completedEntries = getCompletedEntries(h, completions);
+        const streak = calculateStreak(completedEntries, h.id);
+        const longest = calculateLongestStreak(completedEntries, h.id);
         return { habit: h, rate, streak, longest, completions: habitComps.length };
       })
       .sort((a, b) => b.rate - a.rate);
@@ -94,7 +123,15 @@ export default function InsightsScreen() {
           const y = chartHeight - barH - 15;
           return (
             <React.Fragment key={i}>
-              <Rect x={x} y={y} width={barWidth} height={barH} rx={4} fill={rate >= 67 ? theme.success : rate >= 33 ? theme.warning : theme.error} opacity={0.85} />
+              <Rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barH}
+                rx={4}
+                fill={!dailyData[i].hasScheduledHabits ? theme.surfaceAlt : rate >= 67 ? theme.success : rate >= 33 ? theme.warning : theme.primary}
+                opacity={0.9}
+              />
               <SvgText x={x + barWidth / 2} y={chartHeight - 3} fill={theme.textMuted} fontSize="8" fontFamily="Inter-Regular" textAnchor="middle">
                 {range === 'week' ? days[i].slice(5) : (i % 5 === 0 ? days[i].slice(5) : '')}
               </SvgText>
@@ -106,13 +143,14 @@ export default function InsightsScreen() {
   };
 
   const renderHeatmap = () => {
-    const cellSize = (chartWidth - 20) / 15;
-    const rows = 3;
+    const columns = 7;
+    const cellSize = Math.min(20, (chartViewportWidth - 40) / columns);
+    const rows = Math.ceil(heatmapRates.length / columns);
     return (
-      <Svg width={chartWidth} height={rows * (cellSize + 4) + 10}>
-        {heatmapColors.map((rate, i) => {
-          const col = i % 15;
-          const row = Math.floor(i / 15);
+      <Svg width={chartViewportWidth} height={rows * (cellSize + 4) + 10}>
+        {heatmapRates.map((rate, i) => {
+          const col = i % columns;
+          const row = Math.floor(i / columns);
           const x = col * (cellSize + 4) + 10;
           const y = row * (cellSize + 4) + 5;
           const color = rate === 0 ? theme.surfaceAlt : rate <= 0.33 ? theme.primary + '40' : rate <= 0.66 ? theme.primary + '80' : theme.primary;
@@ -124,26 +162,26 @@ export default function InsightsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 100 }}>
         <Text style={[styles.title, { color: theme.text }]}>Insights</Text>
 
         {/* Range selector */}
         <View style={[styles.rangeRow, { backgroundColor: theme.inputBg }]}>
           {(['week', 'month'] as TabRange[]).map((r) => (
-            <View
+            <Pressable
               key={r}
+              onPress={() => setRange(r)}
               style={[
                 styles.rangeBtn,
                 { backgroundColor: range === r ? theme.primary : 'transparent' },
               ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: range === r }}
             >
-              <Text
-                style={[styles.rangeText, { color: range === r ? '#fff' : theme.textSecondary }]}
-                onPress={() => setRange(r)}
-              >
-                {r === 'week' ? 'This Week' : 'This Month'}
+              <Text style={[styles.rangeText, { color: range === r ? '#fff' : theme.textSecondary }]}>
+                {r === 'week' ? '7 Days' : '30 Days'}
               </Text>
-            </View>
+            </Pressable>
           ))}
         </View>
 
@@ -159,14 +197,24 @@ export default function InsightsScreen() {
         <Card style={{ marginBottom: 16 }}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Completion Rate</Text>
           <Text style={[styles.cardSub, { color: theme.textSecondary }]}>{range === 'week' ? 'Last 7 days' : 'Last 30 days'}</Text>
-          <View style={{ alignItems: 'center', marginTop: 12 }}>{renderChart()}</View>
+          {daysWithHabits.length === 0 ? (
+            <Text style={[styles.emptyChartText, { color: theme.textSecondary }]}>Add an active habit to see your progress.</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={range === 'month'} style={{ marginTop: 12 }}>
+              {renderChart()}
+            </ScrollView>
+          )}
         </Card>
 
         {/* Consistency heatmap */}
         <Card style={{ marginBottom: 16 }}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Consistency Heatmap</Text>
           <Text style={[styles.cardSub, { color: theme.textSecondary }]}>Last 30 days activity</Text>
-          <View style={{ alignItems: 'center', marginTop: 12 }}>{renderHeatmap()}</View>
+          {habits.some((habit) => !habit.archived && !habit.paused) ? (
+            <View style={{ alignItems: 'center', marginTop: 12 }}>{renderHeatmap()}</View>
+          ) : (
+            <Text style={[styles.emptyChartText, { color: theme.textSecondary }]}>Your activity will appear here once you start tracking.</Text>
+          )}
           <View style={styles.heatLegend}>
             <Text style={[styles.heatLegendText, { color: theme.textMuted }]}>Less</Text>
             {[theme.surfaceAlt, theme.primary + '40', theme.primary + '80', theme.primary].map((c, i) => (
@@ -205,12 +253,12 @@ export default function InsightsScreen() {
         </View>
 
         {/* Perfect days */}
-        <Card gradient style={{ marginBottom: 16, padding: 20 }}>
+        <Card style={{ marginBottom: 16, padding: 20 }}>
           <View style={styles.perfectRow}>
-            <TrendingUp size={28} color="#fff" />
+            <TrendingUp size={28} color={theme.success} />
             <View>
-              <Text style={styles.perfectValue}>{stats.perfectDays}</Text>
-              <Text style={styles.perfectLabel}>Perfect Days</Text>
+              <Text style={[styles.perfectValue, { color: theme.text }]}>{stats.perfectDays}</Text>
+              <Text style={[styles.perfectLabel, { color: theme.textSecondary }]}>Perfect Days</Text>
             </View>
           </View>
         </Card>
@@ -233,10 +281,17 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   title: {
     fontFamily: 'Inter-Bold',
-    fontSize: 26,
+    fontSize: typeScale.screenTitle,
     fontWeight: '700',
     paddingTop: 12,
     paddingBottom: 16,
+  },
+  emptyChartText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 16,
+    marginBottom: 8,
   },
   rangeRow: {
     flexDirection: 'row',
@@ -368,11 +423,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: 32,
     fontWeight: '700',
-    color: '#fff',
   },
   perfectLabel: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
   },
 });

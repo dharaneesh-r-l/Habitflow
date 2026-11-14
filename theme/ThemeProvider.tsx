@@ -1,7 +1,7 @@
 import React, { useMemo, useEffect } from 'react';
 import { useHabitStore } from '@/store/habitStore';
-import { darkTheme, lightTheme, ThemeMode } from './colors';
-import { ThemeContext } from './ThemeContext';
+import { darkTheme, lightTheme } from './colors';
+import { ThemeContext, ThemeMode } from './ThemeContext';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const preferences = useHabitStore((s) => s.preferences);

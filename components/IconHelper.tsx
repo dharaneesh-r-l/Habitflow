@@ -22,5 +22,5 @@ export const Icon = ({
   strokeWidth?: number;
 }) => {
   const Component = getIcon(name);
-  return <Component size={size} color={color} strokeWidth={strokeWidth} />;
+  return React.createElement(Component, { size, color, strokeWidth });
 };

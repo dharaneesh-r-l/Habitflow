@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { Habit, CompletionEntry, AppPreferences, Achievement, UserStats } from '@/types';
+import { Habit, CompletionEntry, AppPreferences, Achievement, UserStats, DayOfWeek } from '@/types';
 import { storage } from '@/services/storage';
-import { ACHIEVEMENTS } from '@/data/achievements';
+import { ACHIEVEMENTS, DAILY_CHALLENGES } from '@/data/achievements';
 import { HABIT_LIBRARY } from '@/data/habitLibrary';
 import {
   uid,
@@ -11,7 +11,15 @@ import {
   calculateLongestStreak,
   getLevelFromXP,
   isHabitScheduledOn,
+  isCompletionComplete,
+  getCompletedEntries,
 } from '@/utils/date';
+import {
+  cancelAllReminders,
+  hasNotificationPermission,
+  requestNotificationPermissions,
+  scheduleAllReminders,
+} from '@/services/notifications';
 
 const DEFAULT_PREFS: AppPreferences = {
   theme: 'dark',
@@ -24,11 +32,13 @@ const DEFAULT_PREFS: AppPreferences = {
 
 const DEFAULT_STATS: UserStats = {
   xp: 0,
+  challengeXP: 0,
   level: 1,
   currentStreak: 0,
   longestStreak: 0,
   totalCompletions: 0,
   perfectDays: 0,
+  dailyChallengeClaimedDate: null,
 };
 
 interface HabitState {
@@ -76,7 +86,7 @@ function generateSampleHabits(): Habit[] {
     category: lib.category,
     type: lib.type,
     frequency: lib.frequency,
-    daysOfWeek: lib.daysOfWeek,
+    daysOfWeek: lib.daysOfWeek as DayOfWeek[],
     target: lib.target,
     unit: lib.unit,
     color: lib.color,
@@ -88,7 +98,7 @@ function generateSampleHabits(): Habit[] {
     reminders: lib.suggestedReminders.map((r) => ({
       id: uid(),
       time: r.time,
-      days: lib.daysOfWeek as any,
+      days: lib.daysOfWeek as DayOfWeek[],
       enabled: true,
       title: lib.name,
       message: r.message,
@@ -164,6 +174,14 @@ export const useHabitStore = create<HabitState>((set, get) => ({
         loaded: true,
       });
     }
+
+    recalcStats(set, get);
+    claimDailyChallenge(set, get);
+    checkAchievements(set, get);
+    const preferences = get().preferences;
+    if (preferences.notificationsEnabled && (await hasNotificationPermission())) {
+      await scheduleAllReminders(get().habits);
+    }
   },
 
   seedSampleData: async () => {
@@ -188,6 +206,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     set({ habits });
     await storage.set(storage.KEYS.HABITS, habits);
     get().unlockAchievement('first_habit');
+    await syncReminders(get);
     return habit;
   },
 
@@ -195,6 +214,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     const habits = get().habits.map((h) => (h.id === id ? { ...h, ...updates } : h));
     set({ habits });
     await storage.set(storage.KEYS.HABITS, habits);
+    await syncReminders(get);
   },
 
   deleteHabit: async (id) => {
@@ -204,6 +224,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     await storage.set(storage.KEYS.HABITS, habits);
     await storage.set(storage.KEYS.COMPLETIONS, completions);
     recalcStats(set, get);
+    await syncReminders(get);
   },
 
   archiveHabit: async (id, archived) => {
@@ -236,6 +257,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     set({ completions });
     await storage.set(storage.KEYS.COMPLETIONS, completions);
     recalcStats(set, get);
+    claimDailyChallenge(set, get);
     checkAchievements(set, get);
   },
 
@@ -265,16 +287,21 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     get().completions.find((c) => c.habitId === habitId && c.date === date),
 
   isHabitCompleteOn: (habitId, date) =>
-    !!get().completions.find((c) => c.habitId === habitId && c.date === date),
+    (() => {
+      const habit = get().habits.find((item) => item.id === habitId);
+      const completion = get().completions.find((item) => item.habitId === habitId && item.date === date);
+      return !!habit && isCompletionComplete(habit, completion);
+    })(),
 
   getTodayCompletionRate: () => {
     const today = new Date();
     const dKey = todayKey();
     const scheduled = get().getScheduledHabitsForDate(today);
     if (scheduled.length === 0) return 0;
-    const completed = get().completions.filter(
-      (c) => c.date === dKey && scheduled.some((h) => h.id === c.habitId)
-    );
+    const completed = get().completions.filter((completion) => {
+      const habit = scheduled.find((item) => item.id === completion.habitId);
+      return completion.date === dKey && !!habit && isCompletionComplete(habit, completion);
+    });
     return Math.round((completed.length / scheduled.length) * 100);
   },
 
@@ -282,9 +309,10 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     const d = new Date(date + 'T00:00:00');
     const scheduled = get().getScheduledHabitsForDate(d);
     if (scheduled.length === 0) return 0;
-    const completed = get().completions.filter(
-      (c) => c.date === date && scheduled.some((h) => h.id === c.habitId)
-    );
+    const completed = get().completions.filter((completion) => {
+      const habit = scheduled.find((item) => item.id === completion.habitId);
+      return completion.date === date && !!habit && isCompletionComplete(habit, completion);
+    });
     return Math.round((completed.length / scheduled.length) * 100);
   },
 
@@ -297,9 +325,24 @@ export const useHabitStore = create<HabitState>((set, get) => ({
   getActiveHabits: () => get().habits.filter((h) => !h.archived && !h.paused),
 
   updatePreferences: async (updates) => {
+    const current = get().preferences;
+    if (updates.notificationsEnabled === true && !current.notificationsEnabled) {
+      const granted = await requestNotificationPermissions();
+      if (!granted) {
+        throw new Error('Notification permission was not granted');
+      }
+    }
+
     const preferences = { ...get().preferences, ...updates };
     set({ preferences });
     await storage.set(storage.KEYS.PREFERENCES, preferences);
+    if (updates.notificationsEnabled !== undefined) {
+      if (preferences.notificationsEnabled) {
+        await scheduleAllReminders(get().habits);
+      } else {
+        await cancelAllReminders();
+      }
+    }
   },
 
   unlockAchievement: (type) => {
@@ -311,6 +354,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
   },
 
   resetAllData: async () => {
+    await cancelAllReminders();
     await storage.clearAll();
     set({ habits: [], completions: [], preferences: DEFAULT_PREFS, achievements: ACHIEVEMENTS, stats: DEFAULT_STATS });
   },
@@ -321,46 +365,104 @@ export const useHabitStore = create<HabitState>((set, get) => ({
   },
 }));
 
-function computeStats(habits: Habit[], completions: CompletionEntry[]): UserStats {
-  let xp = 0;
+function computeStats(
+  habits: Habit[],
+  completions: CompletionEntry[],
+  challengeXP = 0,
+  dailyChallengeClaimedDate: string | null = null
+): UserStats {
+  let xp = challengeXP;
   const activeHabits = habits.filter((h) => !h.archived);
   activeHabits.forEach((h) => {
-    const habitCompletions = completions.filter((c) => c.habitId === h.id);
+    const habitCompletions = getCompletedEntries(h, completions);
     xp += habitCompletions.length * 10;
   });
 
-  const allStreaks = activeHabits.map((h) => calculateStreak(completions, h.id));
-  const allLongest = activeHabits.map((h) => calculateLongestStreak(completions, h.id));
+  const allStreaks = activeHabits.map((h) =>
+    calculateStreak(getCompletedEntries(h, completions), h.id)
+  );
+  const allLongest = activeHabits.map((h) =>
+    calculateLongestStreak(getCompletedEntries(h, completions), h.id)
+  );
   const currentStreak = allStreaks.length > 0 ? Math.max(...allStreaks) : 0;
   const longestStreak = allLongest.length > 0 ? Math.max(...allLongest) : 0;
 
   const levelInfo = getLevelFromXP(xp);
-  const totalCompletions = completions.length;
+  const completedEntries = completions.filter((completion) => {
+    const habit = habits.find((item) => item.id === completion.habitId);
+    return !!habit && isCompletionComplete(habit, completion);
+  });
+  const totalCompletions = completedEntries.length;
 
   // perfect days
   let perfectDays = 0;
-  const dateSet = new Set(completions.map((c) => c.date));
+  const dateSet = new Set(completedEntries.map((c) => c.date));
   dateSet.forEach((d) => {
     const date = new Date(d + 'T00:00:00');
     const scheduled = activeHabits.filter((h) => isHabitScheduledOn(h, date));
     if (scheduled.length > 0) {
       const completed = scheduled.every((h) =>
-        completions.some((c) => c.habitId === h.id && c.date === d)
+        isCompletionComplete(
+          h,
+          completions.find((c) => c.habitId === h.id && c.date === d)
+        )
       );
       if (completed) perfectDays++;
     }
   });
 
-  return { xp, level: levelInfo.level, currentStreak, longestStreak, totalCompletions, perfectDays };
+  return {
+    xp,
+    challengeXP,
+    level: levelInfo.level,
+    currentStreak,
+    longestStreak,
+    totalCompletions,
+    perfectDays,
+    dailyChallengeClaimedDate,
+  };
 }
 
 function recalcStats(
   set: (partial: Partial<HabitState>) => void,
   get: () => HabitState
 ) {
-  const stats = computeStats(get().habits, get().completions);
+  const stats = computeStats(
+    get().habits,
+    get().completions,
+    get().stats.challengeXP ?? 0,
+    get().stats.dailyChallengeClaimedDate ?? null
+  );
   set({ stats });
   storage.set(storage.KEYS.STATS, stats);
+}
+
+function claimDailyChallenge(
+  set: (partial: Partial<HabitState>) => void,
+  get: () => HabitState
+) {
+  const date = todayKey();
+  const stats = get().stats;
+  const challenge = DAILY_CHALLENGES[0];
+  if (stats.dailyChallengeClaimedDate === date) return;
+
+  const scheduled = get().getScheduledHabitsForDate(new Date());
+  const completedCount = scheduled.filter((habit) =>
+    isCompletionComplete(
+      habit,
+      get().completions.find((completion) => completion.habitId === habit.id && completion.date === date)
+    )
+  ).length;
+  if (completedCount < challenge.target) return;
+
+  const updatedStats = computeStats(
+    get().habits,
+    get().completions,
+    (stats.challengeXP ?? 0) + challenge.xp,
+    date
+  );
+  set({ stats: updatedStats });
+  storage.set(storage.KEYS.STATS, updatedStats);
 }
 
 function checkAchievements(
@@ -382,6 +484,19 @@ function checkAchievements(
   if (stats.perfectDays >= 1) unlock('perfect_day');
   if (stats.perfectDays >= 7) unlock('perfect_week');
 
-  const uniqueCompleted = new Set(completions.map((c) => c.habitId));
+  const uniqueCompleted = new Set(
+    completions
+      .filter((completion) => {
+        const habit = habits.find((item) => item.id === completion.habitId);
+        return !!habit && isCompletionComplete(habit, completion);
+      })
+      .map((completion) => completion.habitId)
+  );
   if (uniqueCompleted.size >= 10) unlock('habit_master_10');
+}
+
+function syncReminders(get: () => HabitState): Promise<void> {
+  return get().preferences.notificationsEnabled
+    ? scheduleAllReminders(get().habits)
+    : Promise.resolve();
 }

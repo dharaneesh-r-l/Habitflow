@@ -13,6 +13,8 @@ A premium, futuristic habit tracker built with React Native, Expo, and TypeScrip
 - **AI Coach** — Locally-generated habit recommendations and productivity insights from your actual data (no API key required, ready for future AI integration)
 - **Profile & Settings** — Dark/light theme, notification settings, week start preference, data export, reset, app info
 
+Numeric habits show progress toward their target and count as complete once the target is reached. The daily challenge awards its XP once per day when its goal is met. Habit reminders require notification permission on the device.
+
 ## Tech Stack
 
 - **React Native** + **Expo** (SDK 57) + **TypeScript**

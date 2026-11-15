@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, useReducedMotion } from 'react-native-reanimated';
-import { Check, Plus } from 'lucide-react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, useReducedMotion } from 'react-native-reanimated';
+import { Bell, Check, Flame, Plus } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { Icon } from '@/components/IconHelper';
@@ -16,9 +16,26 @@ interface HabitItemProps {
   onPress?: () => void;
   compact?: boolean;
   readOnly?: boolean;
+  dense?: boolean;
+  animateProgress?: boolean;
+  streak?: number;
+  reminderTime?: string;
+  reminderCount?: number;
 }
 
-export function HabitItem({ habit, completion, onToggle, onPress, compact, readOnly }: HabitItemProps) {
+export function HabitItem({
+  habit,
+  completion,
+  onToggle,
+  onPress,
+  compact,
+  readOnly,
+  dense,
+  animateProgress,
+  streak = 0,
+  reminderTime,
+  reminderCount = 0,
+}: HabitItemProps) {
   const { theme } = useAppTheme();
   const hapticsEnabled = useHabitStore((state) => state.preferences.hapticsEnabled);
   const reduceMotion = useReducedMotion();
@@ -26,9 +43,13 @@ export function HabitItem({ habit, completion, onToggle, onPress, compact, readO
     ? !!completion
     : !!completion && completion.value >= habit.target;
   const scale = useSharedValue(1);
+  const progressValue = useSharedValue(0);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+  }));
+  const animatedProgressStyle = useAnimatedStyle(() => ({
+    width: `${progressValue.value}%`,
   }));
 
   const handlePress = () => {
@@ -55,6 +76,23 @@ export function HabitItem({ habit, completion, onToggle, onPress, compact, readO
       : completion
       ? Math.min(100, (completion.value / Math.max(1, habit.target)) * 100)
       : 0;
+  const statusLabel = habit.archived
+    ? 'Archived'
+    : habit.paused
+    ? 'Paused'
+    : isComplete
+    ? 'Complete'
+    : progress > 0
+    ? 'In progress'
+    : 'Not started';
+
+  useEffect(() => {
+    if (!animateProgress || reduceMotion) {
+      progressValue.value = progress;
+      return;
+    }
+    progressValue.value = withTiming(progress, { duration: 220 });
+  }, [animateProgress, progress, progressValue, reduceMotion]);
 
   return (
     <Animated.View style={animatedStyle}>
@@ -63,31 +101,32 @@ export function HabitItem({ habit, completion, onToggle, onPress, compact, readO
           styles.container,
           {
             backgroundColor: theme.card,
-            borderColor: isComplete ? habit.color : theme.cardBorder,
-            paddingVertical: compact ? 10 : 14,
-            paddingHorizontal: compact ? 12 : 16,
+            borderColor: isComplete ? (dense ? theme.primary : habit.color) : theme.cardBorder,
+            borderWidth: dense ? 1 : 1.5,
+            paddingVertical: dense || compact ? 10 : 14,
+            paddingHorizontal: dense || compact ? 12 : 16,
           },
         ]}
       >
         <Pressable
           onPress={onPress || handlePress}
-          style={({ pressed }) => [styles.main, pressed && { opacity: 0.84 }]}
+          style={({ pressed }) => [styles.main, dense && styles.denseMain, pressed && { opacity: 0.84 }]}
           accessibilityRole="button"
           accessibilityLabel={`${habit.name}${onPress ? ', habit options' : ', log completion'}`}
         >
-          <View style={[styles.iconWrap, { backgroundColor: habit.color + '22' }]}>
-            <Icon name={habit.icon} size={22} color={habit.color} />
+          <View style={[styles.iconWrap, dense && styles.denseIconWrap, { backgroundColor: habit.color + '22' }]}>
+            <Icon name={habit.icon} size={dense ? 20 : 22} color={habit.color} />
           </View>
 
-          <View style={styles.content}>
+          <View style={[styles.content, dense && styles.denseContent]}>
             <Text
-              style={[styles.name, { color: theme.text, fontSize: compact ? 14 : 15 }]}
+              style={[styles.name, { color: theme.text, fontSize: compact || dense ? 14 : 15 }]}
               numberOfLines={1}
             >
               {habit.name}
             </Text>
             {habit.type !== 'boolean' && (
-              <Text style={[styles.target, { color: theme.textSecondary }]}>
+              <Text style={[styles.target, { color: theme.textSecondary }]} numberOfLines={1}>
                 {completion ? completion.value : 0}/{habit.target} {habit.unit}
               </Text>
             )}
@@ -104,12 +143,44 @@ export function HabitItem({ habit, completion, onToggle, onPress, compact, readO
                 accessibilityValue={{ min: 0, max: 100, now: Math.round(progress) }}
                 accessibilityLabel={`${habit.name} progress`}
               >
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${progress}%`, backgroundColor: habit.color },
-                  ]}
-                />
+              {animateProgress ? (
+                <Animated.View style={[styles.progressFill, animatedProgressStyle, { backgroundColor: theme.primary }]} />
+              ) : (
+                <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: habit.color }]} />
+              )}
+              </View>
+            )}
+            {dense && (
+              <View style={styles.denseMeta}>
+              <Text
+                style={[
+                  styles.statusText,
+                  {
+                    color: isComplete
+                      ? theme.success
+                      : progress > 0
+                      ? theme.primary
+                      : theme.textMuted,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {statusLabel}
+              </Text>
+              {!!streak && (
+                <View style={styles.metaItem}>
+                  <Flame size={12} color={theme.warning} />
+                  <Text style={[styles.metaText, { color: theme.textSecondary }]}>{streak}d</Text>
+                </View>
+              )}
+              {!!reminderTime && (
+                <View style={styles.metaItem}>
+                  <Bell size={12} color={theme.textMuted} />
+                  <Text style={[styles.metaText, { color: theme.textSecondary }]}>
+                    {reminderTime}{reminderCount > 1 ? ` +${reminderCount - 1}` : ''}
+                  </Text>
+                </View>
+              )}
               </View>
             )}
           </View>
@@ -117,8 +188,7 @@ export function HabitItem({ habit, completion, onToggle, onPress, compact, readO
         <Pressable
           onPress={handlePress}
           disabled={readOnly}
-          hitSlop={8}
-          style={({ pressed }) => [styles.checkBtn, {
+          style={({ pressed }) => [styles.checkBtn, dense && styles.denseCheckBtn, {
             backgroundColor: isComplete ? habit.color : theme.surfaceAlt,
             borderColor: isComplete ? habit.color : theme.border,
           }, (pressed || readOnly) && { opacity: 0.55 }]}
@@ -130,7 +200,7 @@ export function HabitItem({ habit, completion, onToggle, onPress, compact, readO
         >
           {isComplete ? (
             <Check size={18} color="#fff" strokeWidth={3} />
-          ) : habit.type === 'boolean' ? null : (
+          ) : (
             <Plus size={18} color={theme.textSecondary} strokeWidth={2.5} />
           )}
         </Pressable>
@@ -153,6 +223,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     flex: 1,
   },
+  denseMain: {
+    gap: 10,
+  },
   iconWrap: {
     width: 42,
     height: 42,
@@ -160,8 +233,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  denseIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+  },
   content: {
     flex: 1,
+    gap: 2,
+  },
+  denseContent: {
     gap: 2,
   },
   progressTrack: {
@@ -182,6 +263,26 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 12,
   },
+  denseMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 16,
+    gap: spacing.sm,
+  },
+  statusText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 11,
+    flexShrink: 1,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  metaText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+  },
   checkBtn: {
     width: 28,
     height: 28,
@@ -189,5 +290,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  denseCheckBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
   },
 });

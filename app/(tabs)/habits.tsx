@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { Plus, Archive, Pause, Play, Trash2, Edit3 } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
@@ -11,12 +11,13 @@ import { ModalSheet } from '@/components/ui/ModalSheet';
 import { HabitFormModal } from '@/components/HabitFormModal';
 import { HabitItem } from '@/components/HabitItem';
 import { Icon } from '@/components/IconHelper';
-import { Habit, CATEGORIES, HabitCategory, CATEGORY_COLORS } from '@/types';
+import { Habit, CATEGORIES, HabitCategory } from '@/types';
 import { calculateStreak, getCompletedEntries, isCompletionComplete, todayKey } from '@/utils/date';
 import { spacing, typeScale } from '@/theme/tokens';
 
 export default function HabitsScreen() {
   const { theme } = useAppTheme();
+  const reduceMotion = useReducedMotion();
   const habits = useHabitStore((s) => s.habits);
   const completions = useHabitStore((s) => s.completions);
   const addHabit = useHabitStore((s) => s.addHabit);
@@ -98,21 +99,52 @@ export default function HabitsScreen() {
         </Pressable>
       </View>
 
-      {/* Filter chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.sm }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+        style={styles.filterScroll}
+        accessibilityLabel="Filter habits by category"
+      >
         <Pressable
           onPress={() => setFilterCategory('all')}
-          style={[styles.chip, { backgroundColor: filterCategory === 'all' ? theme.primary : theme.inputBg, borderColor: filterCategory === 'all' ? theme.primary : theme.border }]}
+          style={({ pressed }) => [
+            styles.chip,
+            {
+              backgroundColor: filterCategory === 'all' ? theme.primaryDim : theme.inputBg,
+              borderColor: filterCategory === 'all' ? theme.primary : theme.border,
+              opacity: pressed ? 0.76 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: filterCategory === 'all' }}
         >
-          <Text style={[styles.chipText, { color: filterCategory === 'all' ? '#fff' : theme.textSecondary }]}>All</Text>
+          {filterCategory === 'all' && !reduceMotion ? (
+            <Animated.Text entering={FadeIn.duration(150)} style={[styles.chipText, { color: theme.primary }]}>All</Animated.Text>
+          ) : (
+            <Text style={[styles.chipText, { color: filterCategory === 'all' ? theme.primary : theme.textSecondary }]}>All</Text>
+          )}
         </Pressable>
         {CATEGORIES.map((cat) => (
           <Pressable
             key={cat}
             onPress={() => setFilterCategory(cat)}
-            style={[styles.chip, { backgroundColor: filterCategory === cat ? CATEGORY_COLORS[cat] + '22' : theme.inputBg, borderColor: filterCategory === cat ? CATEGORY_COLORS[cat] : theme.border }]}
+            style={({ pressed }) => [
+              styles.chip,
+              {
+                backgroundColor: filterCategory === cat ? theme.primaryDim : theme.inputBg,
+                borderColor: filterCategory === cat ? theme.primary : theme.border,
+                opacity: pressed ? 0.76 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: filterCategory === cat }}
           >
-            <Text style={[styles.chipText, { color: filterCategory === cat ? CATEGORY_COLORS[cat] : theme.textSecondary }]}>{cat}</Text>
+            {filterCategory === cat && !reduceMotion ? (
+              <Animated.Text entering={FadeIn.duration(150)} style={[styles.chipText, { color: theme.primary }]}>{cat}</Animated.Text>
+            ) : (
+              <Text style={[styles.chipText, { color: filterCategory === cat ? theme.primary : theme.textSecondary }]}>{cat}</Text>
+            )}
           </Pressable>
         ))}
       </ScrollView>
@@ -120,15 +152,16 @@ export default function HabitsScreen() {
       {/* Toggle archived */}
       <Pressable
         onPress={() => setShowArchived(!showArchived)}
-        style={{ paddingHorizontal: 20, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+        style={({ pressed }) => [styles.archiveToggle, { opacity: pressed ? 0.7 : 1 }]}
         accessibilityRole="button"
         accessibilityLabel={showArchived ? 'Hide archived habits' : 'Show archived habits'}
+        accessibilityState={{ selected: showArchived }}
       >
         <Archive size={16} color={theme.textSecondary} />
         <Text style={{ color: theme.textSecondary, fontFamily: 'Inter-Medium', fontSize: 13 }}>{showArchived ? 'Showing archived' : 'Show archived'}</Text>
       </Pressable>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 100, gap: spacing.md }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.habitList}>
         {filteredHabits.length === 0 ? (
           <Card style={{ alignItems: 'center', paddingVertical: 40, marginTop: 20 }}>
             <Text style={[styles.emptyTitle, { color: theme.text }]}>
@@ -149,31 +182,21 @@ export default function HabitsScreen() {
           filteredHabits.map((habit, i) => {
             const streak = calculateStreak(getCompletedEntries(habit, completions), habit.id);
             const comp = getCompletionForHabitOnDate(habit.id, todayKey());
+            const enabledReminders = habit.reminders.filter((reminder) => reminder.enabled);
             return (
-              <Animated.View key={habit.id} entering={FadeInDown.delay(i * 50).duration(400)}>
-                <View>
+              <Animated.View key={habit.id} entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(i, 6) * 35).duration(220)}>
                   <HabitItem
                     habit={habit}
                     completion={comp}
                     onToggle={() => handleToggle(habit)}
                     onPress={() => setMenuHabit(habit)}
                     readOnly={showArchived || habit.paused}
+                    dense
+                    animateProgress
+                    streak={streak}
+                    reminderTime={enabledReminders[0]?.time}
+                    reminderCount={enabledReminders.length}
                   />
-                  {(streak > 0 || habit.reminders.some((reminder) => reminder.enabled)) && (
-                    <View style={styles.metaRow}>
-                      {streak > 0 && (
-                        <View style={styles.metaItem}>
-                          <Text style={{ color: theme.warning, fontSize: 11, fontFamily: 'Inter-Medium' }}>🔥 {streak}d streak</Text>
-                        </View>
-                      )}
-                      {habit.reminders.some((reminder) => reminder.enabled) && (
-                        <Text style={{ color: theme.textMuted, fontSize: 11, fontFamily: 'Inter-Regular' }}>{habit.reminders.filter(r => r.enabled).length} reminders</Text>
-                      )}
-                      {habit.paused && <Text style={{ color: theme.warning, fontSize: 11 }}>Paused</Text>}
-                      {habit.archived && <Text style={{ color: theme.textMuted, fontSize: 11 }}>Archived</Text>}
-                    </View>
-                  )}
-                </View>
               </Animated.View>
             );
           })
@@ -248,16 +271,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filterRow: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
+    height: 38,
+    minHeight: 38,
+    paddingHorizontal: 13,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'visible',
   },
   chipText: {
     fontFamily: 'Inter-Medium',
     fontSize: 13,
     fontWeight: '500',
+    includeFontPadding: false,
+    flexShrink: 0,
+    textAlign: 'center',
+  },
+  archiveToggle: {
+    minHeight: 44,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  habitList: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 112,
+    gap: spacing.sm,
   },
   emptyTitle: {
     fontFamily: 'Inter-Bold',
@@ -270,13 +324,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
-  metaRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-  },
-  metaItem: {},
   menuHabitInfo: {
     flexDirection: 'row',
     gap: 14,

@@ -142,45 +142,50 @@ export const useHabitStore = create<HabitState>((set, get) => ({
   loaded: false,
 
   init: async () => {
-    const [habits, completions, prefs, achievements, stats, seeded] = await Promise.all([
-      storage.get<Habit[]>(storage.KEYS.HABITS),
-      storage.get<CompletionEntry[]>(storage.KEYS.COMPLETIONS),
-      storage.get<AppPreferences>(storage.KEYS.PREFERENCES),
-      storage.get<Achievement[]>(storage.KEYS.ACHIEVEMENTS),
-      storage.get<UserStats>(storage.KEYS.STATS),
-      storage.get<boolean>(storage.KEYS.SEEDED),
-    ]);
+    try {
+      const [habits, completions, prefs, achievements, stats, seeded] = await Promise.all([
+        storage.get<Habit[]>(storage.KEYS.HABITS),
+        storage.get<CompletionEntry[]>(storage.KEYS.COMPLETIONS),
+        storage.get<AppPreferences>(storage.KEYS.PREFERENCES),
+        storage.get<Achievement[]>(storage.KEYS.ACHIEVEMENTS),
+        storage.get<UserStats>(storage.KEYS.STATS),
+        storage.get<boolean>(storage.KEYS.SEEDED),
+      ]);
 
-    if (!prefs) {
-      await storage.set(storage.KEYS.PREFERENCES, DEFAULT_PREFS);
-    }
+      if (!prefs) {
+        await storage.set(storage.KEYS.PREFERENCES, DEFAULT_PREFS);
+      }
 
-    if (!seeded && (!habits || habits.length === 0)) {
-      const sampleHabits = generateSampleHabits();
-      const sampleCompletions = generateSampleCompletions(sampleHabits);
-      const sampleStats = computeStats(sampleHabits, sampleCompletions);
-      await storage.set(storage.KEYS.HABITS, sampleHabits);
-      await storage.set(storage.KEYS.COMPLETIONS, sampleCompletions);
-      await storage.set(storage.KEYS.STATS, sampleStats);
-      await storage.set(storage.KEYS.SEEDED, true);
-      set({ habits: sampleHabits, completions: sampleCompletions, stats: sampleStats, preferences: prefs || DEFAULT_PREFS, achievements: achievements || ACHIEVEMENTS, loaded: true });
-    } else {
-      set({
-        habits: habits || [],
-        completions: completions || [],
-        preferences: prefs || DEFAULT_PREFS,
-        achievements: achievements || ACHIEVEMENTS,
-        stats: stats || DEFAULT_STATS,
-        loaded: true,
-      });
-    }
+      if (!seeded && (!habits || habits.length === 0)) {
+        const sampleHabits = generateSampleHabits();
+        const sampleCompletions = generateSampleCompletions(sampleHabits);
+        const sampleStats = computeStats(sampleHabits, sampleCompletions);
+        await storage.set(storage.KEYS.HABITS, sampleHabits);
+        await storage.set(storage.KEYS.COMPLETIONS, sampleCompletions);
+        await storage.set(storage.KEYS.STATS, sampleStats);
+        await storage.set(storage.KEYS.SEEDED, true);
+        set({ habits: sampleHabits, completions: sampleCompletions, stats: sampleStats, preferences: prefs || DEFAULT_PREFS, achievements: achievements || ACHIEVEMENTS, loaded: true });
+      } else {
+        set({
+          habits: habits || [],
+          completions: completions || [],
+          preferences: prefs || DEFAULT_PREFS,
+          achievements: achievements || ACHIEVEMENTS,
+          stats: stats || DEFAULT_STATS,
+          loaded: true,
+        });
+      }
 
-    recalcStats(set, get);
-    claimDailyChallenge(set, get);
-    checkAchievements(set, get);
-    const preferences = get().preferences;
-    if (preferences.notificationsEnabled && (await hasNotificationPermission())) {
-      await scheduleAllReminders(get().habits);
+      recalcStats(set, get);
+      claimDailyChallenge(set, get);
+      checkAchievements(set, get);
+      const preferences = get().preferences;
+      if (preferences.notificationsEnabled && (await hasNotificationPermission())) {
+        await scheduleAllReminders(get().habits);
+      }
+    } catch (e) {
+      console.warn('Failed to initialize habit store', e);
+      set({ loaded: true });
     }
   },
 

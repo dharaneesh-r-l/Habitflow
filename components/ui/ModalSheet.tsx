@@ -1,5 +1,15 @@
 import React from 'react';
-import { Modal, View, StyleSheet, Pressable, ScrollView, Text, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
+import {
+  Modal,
+  View,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Text,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
@@ -13,39 +23,67 @@ interface ModalSheetProps {
   maxHeight?: number;
 }
 
-export function ModalSheet({ visible, onClose, title, children, maxHeight = 85 }: ModalSheetProps) {
+export function ModalSheet({
+  visible,
+  onClose,
+  title,
+  children,
+  maxHeight = 88,
+}: ModalSheetProps) {
   const { theme } = useAppTheme();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardWrap}
+        >
           <Pressable
             style={[
               styles.sheet,
               {
                 backgroundColor: theme.surface,
+                borderColor: theme.cardBorder,
                 maxHeight: height * (maxHeight / 100),
                 paddingBottom: Math.max(insets.bottom, 16),
               },
             ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <View style={styles.handle} />
+            <View style={[styles.handle, { backgroundColor: theme.textMuted + '40' }]} />
             {title && (
-              <View style={styles.header}>
+              <View style={[styles.header, { borderBottomColor: theme.border }]}>
                 <View style={styles.titlePlaceholder} />
                 <View style={styles.titleWrap}>
-                  <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>{title}</Text>
+                  <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+                    {title}
+                  </Text>
                 </View>
-                <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
-                  <X size={22} color={theme.textSecondary} strokeWidth={2} />
+                <Pressable
+                  onPress={onClose}
+                  style={[styles.closeBtn, { backgroundColor: theme.surfaceAlt }]}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                >
+                  <X size={18} color={theme.textSecondary} strokeWidth={2.5} />
                 </Pressable>
               </View>
             )}
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+            >
               {children}
             </ScrollView>
           </Pressable>
@@ -58,44 +96,61 @@ export function ModalSheet({ visible, onClose, title, children, maxHeight = 85 }
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5, 8, 15, 0.72)',
+    justifyContent: 'flex-end',
+  },
+  keyboardWrap: {
+    width: '100%',
     justifyContent: 'flex-end',
   },
   sheet: {
     borderTopLeftRadius: radius.sheet,
     borderTopRightRadius: radius.sheet,
-    paddingTop: 8,
+    borderTopWidth: 1.5,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    paddingTop: 10,
     paddingHorizontal: 20,
     width: '100%',
-    maxWidth: 560,
+    maxWidth: 580,
     alignSelf: 'center',
+    elevation: 24,
+    shadowColor: '#000000',
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -4 },
   },
   handle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(148,163,184,0.3)',
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingBottom: 14,
+    marginBottom: 14,
+    borderBottomWidth: 1,
     width: '100%',
   },
-  titlePlaceholder: { width: 36 },
+  titlePlaceholder: { width: 32 },
   titleWrap: { flex: 1, alignItems: 'center' },
   title: {
     fontFamily: 'Inter-Bold',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
   },
   closeBtn: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
 });

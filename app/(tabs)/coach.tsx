@@ -1,13 +1,33 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Sparkles, TrendingUp, Lightbulb, Target, Zap } from 'lucide-react-native';
+import {
+  TrendingUp,
+  Flame,
+  AlertTriangle,
+  Lightbulb,
+  CheckCircle2,
+  Clock,
+  Sunrise,
+  Sparkles,
+  ArrowRight,
+  Target,
+} from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
 import { Card } from '@/components/ui/Card';
-import { Icon } from '@/components/IconHelper';
-import { getLast7Days, dateKey, getCompletedEntries, isCompletionComplete } from '@/utils/date';
+import { Button } from '@/components/ui/Button';
+import { HabitDetailModal } from '@/components/HabitDetailModal';
+import { HabitFormModal } from '@/components/HabitFormModal';
+import { Habit } from '@/types';
+import {
+  getLast7Days,
+  getCompletedEntries,
+  isCompletionComplete,
+  dateKey,
+} from '@/utils/date';
+import { spacing, radius } from '@/theme/tokens';
 
 export default function CoachScreen() {
   const { theme } = useAppTheme();
@@ -15,303 +35,390 @@ export default function CoachScreen() {
   const completions = useHabitStore((s) => s.completions);
   const stats = useHabitStore((s) => s.stats);
   const getScheduledHabitsForDate = useHabitStore((s) => s.getScheduledHabitsForDate);
+  const addHabit = useHabitStore((s) => s.addHabit);
+  const updateHabit = useHabitStore((s) => s.updateHabit);
 
-  const insights = useMemo(() => {
-    const result: { type: 'success' | 'warning' | 'tip'; icon: string; title: string; message: string }[] = [];
-    const activeHabits = habits.filter((h) => !h.archived);
+  const [inspectHabit, setInspectHabit] = useState<Habit | undefined>();
+  const [editingHabit, setEditingHabit] = useState<Habit | undefined>();
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
-    // Top performing habit
-    const perfData = activeHabits.map((h) => {
-      const last7 = getLast7Days();
-      const comps = getCompletedEntries(h, completions).filter((c) => last7.includes(c.date));
+  const activeHabits = useMemo(() => habits.filter((h) => !h.archived && !h.paused), [habits]);
+
+  // Performance calculations for the past 7 days
+  const coachingInsights = useMemo(() => {
+    const last7 = getLast7Days();
+    const insights: {
+      id: string;
+      category: 'strength' | 'attention' | 'routine' | 'streak' | 'tip';
+      title: string;
+      message: string;
+      habit?: Habit;
+      actionText?: string;
+      icon: any;
+      color: string;
+    }[] = [];
+
+    if (activeHabits.length === 0) {
+      insights.push({
+        id: 'no-habits',
+        category: 'tip',
+        title: 'Start Your First Habit',
+        message: 'Building sustainable routines begins with one small daily commitment. Add your first habit today.',
+        actionText: 'Browse Templates',
+        icon: Target,
+        color: theme.primaryLight,
+      });
+      return insights;
+    }
+
+    // Evaluate habit rates
+    const habitStats = activeHabits.map((h) => {
+      const habitComps = getCompletedEntries(h, completions).filter((c) => last7.includes(c.date));
       const scheduledDays = last7.filter((dKey) => {
         const date = new Date(dKey + 'T00:00:00');
         return getScheduledHabitsForDate(date).some((s) => s.id === h.id);
       });
-      return { habit: h, rate: scheduledDays.length > 0 ? comps.length / scheduledDays.length : 0, comps: comps.length };
+      const rate = scheduledDays.length > 0 ? habitComps.length / scheduledDays.length : 0;
+      return { habit: h, rate, count: habitComps.length, scheduledCount: scheduledDays.length };
     });
-    const best = perfData.sort((a, b) => b.rate - a.rate)[0];
-    const worst = perfData.sort((a, b) => a.rate - b.rate)[0];
 
-    if (best && best.rate > 0) {
-      result.push({
-        type: 'success',
-        icon: 'TrendingUp',
-        title: 'Your strongest habit',
-        message: `"${best.habit.name}" has a ${Math.round(best.rate * 100)}% completion rate this week. You're building real consistency here!`,
+    const sortedByBest = [...habitStats].sort((a, b) => b.rate - a.rate);
+    const best = sortedByBest[0];
+    const worst = sortedByBest[sortedByBest.length - 1];
+
+    // Strongest habit insight
+    if (best && best.rate >= 0.7) {
+      insights.push({
+        id: 'best-habit',
+        category: 'strength',
+        title: 'Strongest Consistency',
+        message: `"${best.habit.name}" has an exceptional ${Math.round(best.rate * 100)}% completion rate this week. This is an anchored habit—use it as a springboard to attach new habits.`,
+        habit: best.habit,
+        actionText: 'View Habit Stats',
+        icon: TrendingUp,
+        color: theme.success,
       });
     }
 
+    // Habit needing attention
     if (worst && worst.rate < 0.5 && worst.habit.id !== best?.habit.id) {
-      result.push({
-        type: 'warning',
-        icon: 'AlertTriangle',
-        title: 'Needs attention',
-        message: `"${worst.habit.name}" is at ${Math.round(worst.rate * 100)}% this week. Try scheduling it at a different time or reducing the target.`,
+      insights.push({
+        id: 'worst-habit',
+        category: 'attention',
+        title: 'Friction Detected',
+        message: `"${worst.habit.name}" is sitting at ${Math.round(worst.rate * 100)}% this week. Lower the initial barrier (e.g. reduce the target or shift the routine) to rebuild consistency.`,
+        habit: worst.habit,
+        actionText: 'Tune Goal or Time',
+        icon: AlertTriangle,
+        color: theme.warning,
       });
     }
 
-    if (stats.currentStreak >= 7) {
-      result.push({
-        type: 'success',
-        icon: 'Flame',
-        title: 'Streak power',
-        message: `You're on a ${stats.currentStreak}-day streak! That's ${stats.currentStreak * 10} XP earned through consistency alone.`,
+    // Streak Analysis
+    if (stats.currentStreak >= 3) {
+      insights.push({
+        id: 'streak-momentum',
+        category: 'streak',
+        title: `${stats.currentStreak}-Day Active Streak`,
+        message: `You have locked in ${stats.currentStreak} consecutive days. Research shows habit automaticity increases significantly after 21 days—you are well on your way!`,
+        actionText: 'Maintain Flow',
+        icon: Flame,
+        color: theme.streak,
       });
-    } else if (stats.currentStreak === 0 && activeHabits.length > 0) {
-      result.push({
-        type: 'tip',
-        icon: 'Lightbulb',
-        title: 'Start a streak today',
-        message: 'Complete just one habit today to start building momentum. Small wins compound into big results.',
-      });
-    }
-
-    // Category distribution
-    const categoryCount: Record<string, number> = {};
-    activeHabits.forEach((h) => {
-      categoryCount[h.category] = (categoryCount[h.category] || 0) + 1;
-    });
-    const topCat = Object.entries(categoryCount).sort((a, b) => b[1] - a[1])[0];
-    if (topCat) {
-      result.push({
-        type: 'tip',
-        icon: 'BarChart3',
-        title: 'Your focus area',
-        message: `You have ${topCat[1]} habits in ${topCat[0]}. This is where you're investing the most energy right now.`,
+    } else {
+      insights.push({
+        id: 'streak-rebuild',
+        category: 'tip',
+        title: 'Streak Catalyst',
+        message: 'Complete at least one habit today to ignite your streak counter. Remember: never miss two days in a row.',
+        icon: Lightbulb,
+        color: theme.xp,
       });
     }
 
-    // Morning routine check
+    // Morning Routine Optimization
     const morningHabits = activeHabits.filter((h) => h.routine === 'morning');
     if (morningHabits.length > 0) {
-      const todayKey = dateKey(new Date());
-      const morningDone = morningHabits.filter((habit) =>
+      const todayK = dateKey(new Date());
+      const completedMorning = morningHabits.filter((h) =>
         isCompletionComplete(
-          habit,
-          completions.find((completion) => completion.habitId === habit.id && completion.date === todayKey)
+          h,
+          completions.find((c) => c.habitId === h.id && c.date === todayK)
         )
-      );
-      if (morningDone.length === morningHabits.length) {
-        result.push({
-          type: 'success',
-          icon: 'Sunrise',
-          title: 'Morning wins',
-          message: 'You completed your entire morning routine today. Starting strong sets the tone for everything else!',
-        });
-      }
-    }
+      ).length;
 
-    // Level insight
-    if (stats.xp > 0) {
-      result.push({
-        type: 'tip',
-        icon: 'Zap',
-        title: `Level ${stats.level} progress`,
-        message: `You've earned ${stats.xp} XP total. Each completed habit gives 10 XP — keep stacking those wins!`,
+      insights.push({
+        id: 'morning-routine',
+        category: 'routine',
+        title: 'Morning Anchor',
+        message: `You have ${morningHabits.length} habits in your morning stack (${completedMorning}/${morningHabits.length} completed today). A disciplined morning stack sets the cognitive tone for the whole day.`,
+        icon: Sunrise,
+        color: '#FFA07A',
       });
     }
 
-    // Perfect day suggestion
-    if (stats.perfectDays > 0) {
-      result.push({
-        type: 'success',
-        icon: 'CheckCircle',
-        title: 'Perfectionist',
-        message: `You've had ${stats.perfectDays} perfect days where every habit was completed. Aim for another one today!`,
+    // Evening Habit Check
+    const eveningHabits = activeHabits.filter((h) => h.routine === 'evening' || h.routine === 'night');
+    if (eveningHabits.length >= 2) {
+      insights.push({
+        id: 'evening-routine',
+        category: 'routine',
+        title: 'Wind-Down Architecture',
+        message: `You have ${eveningHabits.length} evening habits. Keep evening habits relaxing rather than mentally exhausting so they don't disrupt your sleep architecture.`,
+        icon: Clock,
+        color: theme.primaryLight,
       });
     }
 
-    return result;
-  }, [habits, completions, stats, getScheduledHabitsForDate]);
+    return insights;
+  }, [activeHabits, completions, stats.currentStreak, theme, getScheduledHabitsForDate]);
 
-  const recommendations = useMemo(() => {
-    const activeCategories = new Set(habits.filter((h) => !h.archived).map((h) => h.category));
-    const recs: { category: string; title: string; reason: string; icon: string; color: string }[] = [];
+  // Overall weekly score
+  const weeklyScore = useMemo(() => {
+    const last7 = getLast7Days();
+    let totalScheduled = 0;
+    let totalCompleted = 0;
 
-    if (!activeCategories.has('Mental Wellness')) {
-      recs.push({ category: 'Mental Wellness', title: 'Add a mindfulness habit', reason: 'Mental wellness habits help reduce stress and improve focus.', icon: 'Brain', color: '#B084F2' });
+    last7.forEach((dKey) => {
+      const date = new Date(dKey + 'T00:00:00');
+      const scheduled = getScheduledHabitsForDate(date);
+      totalScheduled += scheduled.length;
+      totalCompleted += scheduled.filter((h) =>
+        isCompletionComplete(
+          h,
+          completions.find((c) => c.habitId === h.id && c.date === dKey)
+        )
+      ).length;
+    });
+
+    return totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0;
+  }, [getScheduledHabitsForDate, completions]);
+
+  const handleAction = (item: (typeof coachingInsights)[0]) => {
+    if (item.habit) {
+      setInspectHabit(item.habit);
+    } else {
+      setShowCreateModal(true);
     }
-    if (!activeCategories.has('Health')) {
-      recs.push({ category: 'Health', title: 'Track your water intake', reason: 'Staying hydrated improves energy and cognitive function.', icon: 'Droplets', color: '#4ECDC4' });
-    }
-    if (!activeCategories.has('Learning')) {
-      recs.push({ category: 'Learning', title: 'Start reading daily', reason: 'Even 15 minutes of reading builds knowledge over time.', icon: 'BookOpen', color: '#45B7D1' });
-    }
-    if (habits.filter((h) => !h.archived).length < 5) {
-      recs.push({ category: 'Productivity', title: 'Add a deep work habit', reason: 'Focused work sessions boost productivity significantly.', icon: 'Target', color: '#06D6A0' });
-    }
-    return recs.slice(0, 4);
-  }, [habits]);
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
-        {/* AI Coach header */}
-        <Animated.View entering={FadeInDown.duration(500)}>
-          <View style={[styles.coachHeader, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-            <View style={[styles.coachAvatar, { backgroundColor: theme.primaryDim }]}>
-              <Sparkles size={28} color={theme.primary} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 110 }}
+      >
+        <Text style={[styles.title, { color: theme.text }]}>Smart Habit Coach</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+          Evidence-based productivity coaching from your real data
+        </Text>
+
+        {/* Weekly Performance Score Card */}
+        <Animated.View entering={FadeInDown.duration(400)}>
+          <Card
+            highlight
+            style={{
+              marginVertical: spacing.md,
+              padding: spacing.lg,
+              backgroundColor: theme.surface,
+            }}
+          >
+            <View style={styles.scoreRow}>
+              <View style={[styles.scoreBadge, { backgroundColor: theme.primaryDim, borderColor: theme.primary }]}>
+                <Text style={[styles.scoreVal, { color: theme.primaryLight }]}>{weeklyScore}%</Text>
+                <Text style={[styles.scoreLabel, { color: theme.textSecondary }]}>Weekly Flow</Text>
+              </View>
+
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={[styles.scoreTitle, { color: theme.text }]}>
+                  {weeklyScore >= 80
+                    ? 'Elite Weekly Consistency'
+                    : weeklyScore >= 50
+                    ? 'Healthy Progress'
+                    : 'Momentum Building Phase'}
+                </Text>
+                <Text style={[styles.scoreDesc, { color: theme.textSecondary }]}>
+                  {weeklyScore >= 80
+                    ? 'Your daily habit execution is stellar. Keep protecting this rhythm.'
+                    : weeklyScore >= 50
+                    ? 'You are showing regular commitment. Focus on closing your morning stack.'
+                    : 'Target just one keystone habit today to rebuild momentum.'}
+                </Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.coachTitle, { color: theme.text }]}>Habit Coach</Text>
-              <Text style={[styles.coachSub, { color: theme.textSecondary }]}>Personalized insights from your routines</Text>
-            </View>
-          </View>
+          </Card>
         </Animated.View>
 
-        {/* Stats summary */}
-        <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-            <Zap size={18} color={theme.accent} />
-            <Text style={[styles.summaryValue, { color: theme.text }]}>{stats.xp}</Text>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Total XP</Text>
-          </View>
-          <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-            <Target size={18} color={theme.primary} />
-            <Text style={[styles.summaryValue, { color: theme.text }]}>{stats.totalCompletions}</Text>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Completions</Text>
-          </View>
-          <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-            <TrendingUp size={18} color={theme.success} />
-            <Text style={[styles.summaryValue, { color: theme.text }]}>{stats.perfectDays}</Text>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Perfect Days</Text>
-          </View>
+        {/* Coach Recommendations Feed */}
+        <View style={styles.sectionHeader}>
+          <Sparkles size={16} color={theme.primaryLight} />
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Actionable Insights</Text>
         </View>
 
-        {/* Insights */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Your Insights</Text>
-        <View style={{ gap: 10, marginBottom: 16 }}>
-          {insights.length === 0 ? (
-            <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
-              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Start tracking habits to get insights</Text>
-            </Card>
-          ) : (
-            insights.map((insight, i) => {
-              const colorMap = { success: theme.success, warning: theme.warning, tip: theme.primary };
-              const color = colorMap[insight.type];
-              return (
-                <Animated.View key={i} entering={FadeInDown.delay(i * 80).duration(400)}>
-                  <Card style={{ padding: 16 }}>
-                    <View style={styles.insightRow}>
-                      <View style={[styles.insightIcon, { backgroundColor: color + '22' }]}>
-                        <Icon name={insight.icon} size={20} color={color} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.insightTitle, { color: theme.text }]}>{insight.title}</Text>
-                        <Text style={[styles.insightMessage, { color: theme.textSecondary }]}>{insight.message}</Text>
-                      </View>
+        <View style={{ gap: 12 }}>
+          {coachingInsights.map((insight, idx) => {
+            const InsightIcon = insight.icon;
+            return (
+              <Animated.View
+                key={insight.id}
+                entering={FadeInDown.delay(100 + idx * 45).duration(350)}
+              >
+                <Card
+                  style={[
+                    styles.insightCard,
+                    {
+                      backgroundColor: theme.surface,
+                      borderColor: theme.cardBorder,
+                    },
+                  ]}
+                >
+                  <View style={styles.insightHeader}>
+                    <View style={[styles.insightIconBadge, { backgroundColor: insight.color + '22' }]}>
+                      <InsightIcon size={20} color={insight.color} />
                     </View>
-                  </Card>
-                </Animated.View>
-              );
-            })
-          )}
-        </View>
-
-        {/* Recommendations */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Recommendations</Text>
-        <View style={{ gap: 10 }}>
-          {recommendations.map((rec, i) => (
-            <Animated.View key={i} entering={FadeInDown.delay(i * 80).duration(400)}>
-              <Card style={{ padding: 16 }}>
-                <View style={styles.insightRow}>
-                  <View style={[styles.insightIcon, { backgroundColor: rec.color + '22' }]}>
-                    <Icon name={rec.icon} size={20} color={rec.color} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.insightTitle, { color: theme.text }]}>
+                        {insight.title}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.insightTitle, { color: theme.text }]}>{rec.title}</Text>
-                    <Text style={[styles.insightMessage, { color: theme.textSecondary }]}>{rec.reason}</Text>
-                  </View>
-                </View>
-              </Card>
-            </Animated.View>
-          ))}
-        </View>
 
-        <View style={styles.aiNote}>
-          <Lightbulb size={14} color={theme.textMuted} />
-          <Text style={[styles.aiNoteText, { color: theme.textMuted }]}>
-            Insights are generated locally from your habit data. AI integration coming soon.
-          </Text>
+                  <Text style={[styles.insightMessage, { color: theme.textSecondary }]}>
+                    {insight.message}
+                  </Text>
+
+                  {insight.actionText && (
+                    <Pressable
+                      onPress={() => handleAction(insight)}
+                      style={[
+                        styles.actionButton,
+                        { backgroundColor: theme.surfaceAlt, borderColor: theme.border },
+                      ]}
+                      accessibilityRole="button"
+                    >
+                      <Text style={[styles.actionText, { color: theme.primaryLight }]}>
+                        {insight.actionText}
+                      </Text>
+                      <ArrowRight size={14} color={theme.primaryLight} />
+                    </Pressable>
+                  )}
+                </Card>
+              </Animated.View>
+            );
+          })}
         </View>
       </ScrollView>
+
+      {/* Habit Details Modal */}
+      <HabitDetailModal
+        habit={inspectHabit}
+        visible={!!inspectHabit}
+        onClose={() => setInspectHabit(undefined)}
+        onEdit={(habit) => {
+          setInspectHabit(undefined);
+          setEditingHabit(habit);
+          setShowCreateModal(true);
+        }}
+      />
+
+      {/* Habit Form Modal */}
+      {showCreateModal && (
+        <HabitFormModal
+          initialHabit={editingHabit}
+          onSave={async (data) => {
+            if (editingHabit) {
+              await updateHabit(editingHabit.id, data);
+            } else {
+              await addHabit(data);
+            }
+            setShowCreateModal(false);
+            setEditingHabit(undefined);
+          }}
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditingHabit(undefined);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  coachHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 20,
-    marginBottom: 16,
-    marginTop: 12,
-  },
-  coachAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  coachTitle: {
+  title: {
     fontFamily: 'Inter-Bold',
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
+    paddingTop: spacing.md,
   },
-  coachSub: {
+  subtitle: {
     fontFamily: 'Inter-Regular',
     fontSize: 13,
     marginTop: 2,
+    marginBottom: spacing.xs,
   },
-  summaryRow: {
+  scoreRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
     alignItems: 'center',
+    gap: 16,
   },
-  summaryValue: {
+  scoreBadge: {
+    width: 82,
+    height: 82,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
+  },
+  scoreVal: {
     fontFamily: 'Inter-Bold',
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 8,
+    fontSize: 22,
+    fontWeight: '800',
   },
-  summaryLabel: {
+  scoreLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  scoreTitle: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  scoreDesc: {
     fontFamily: 'Inter-Regular',
-    fontSize: 11,
-    marginTop: 2,
-    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
   },
   sectionTitle: {
     fontFamily: 'Inter-Bold',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    marginBottom: 12,
   },
-  emptyText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
+  insightCard: {
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    gap: 10,
   },
-  insightRow: {
+  insightHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
-    alignItems: 'flex-start',
   },
-  insightIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  insightIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -323,19 +430,21 @@ const styles = StyleSheet.create({
   insightMessage: {
     fontFamily: 'Inter-Regular',
     fontSize: 13,
-    marginTop: 4,
     lineHeight: 19,
   },
-  aiNote: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 20,
-    paddingHorizontal: 4,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    marginTop: 2,
   },
-  aiNoteText: {
-    fontFamily: 'Inter-Regular',
+  actionText: {
+    fontFamily: 'Inter-Medium',
     fontSize: 12,
-    flex: 1,
+    fontWeight: '600',
   },
 });

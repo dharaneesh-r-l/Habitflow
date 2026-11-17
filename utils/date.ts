@@ -150,21 +150,19 @@ export function getXPForLevel(level: number): number {
 }
 
 export function getLevelFromXP(xp: number): { level: number; currentLevelXP: number; nextLevelXP: number; progress: number } {
+  const safeXP = Math.max(0, xp);
   let level = 1;
-  let remaining = xp;
-  while (remaining >= getXPForLevel(level + 1)) {
-    remaining -= getXPForLevel(level + 1);
+  let remaining = safeXP;
+  while (remaining >= getXPForLevel(level)) {
+    remaining -= getXPForLevel(level);
     level++;
   }
-  const currentLevelXP = getXPForLevel(level);
-  const nextLevelXP = getXPForLevel(level + 1);
-  const intoLevel = xp - currentLevelXP;
-  const span = nextLevelXP - currentLevelXP;
+  const nextLevelXP = getXPForLevel(level);
   return {
     level,
-    currentLevelXP: intoLevel,
-    nextLevelXP: span,
-    progress: span > 0 ? intoLevel / span : 0,
+    currentLevelXP: remaining,
+    nextLevelXP,
+    progress: nextLevelXP > 0 ? Math.min(1, Math.max(0, remaining / nextLevelXP)) : 0,
   };
 }
 

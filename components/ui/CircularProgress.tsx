@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import Animated, {
   useSharedValue,
   useAnimatedProps,
@@ -17,6 +17,7 @@ interface CircularProgressProps {
   strokeWidth?: number;
   progress: number; // 0-100
   color?: string;
+  gradientColors?: [string, string];
   trackColor?: string;
   children?: React.ReactNode;
 }
@@ -26,6 +27,7 @@ export function CircularProgress({
   strokeWidth = 10,
   progress,
   color,
+  gradientColors,
   trackColor,
   children,
 }: CircularProgressProps) {
@@ -40,9 +42,9 @@ export function CircularProgress({
     animatedProgress.value = reduceMotion
       ? normalizedProgress
       : withTiming(normalizedProgress, {
-      duration: 1000,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-    });
+          duration: 900,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        });
   }, [animatedProgress, normalizedProgress, reduceMotion]);
 
   const animatedProps = useAnimatedProps(() => {
@@ -50,32 +52,42 @@ export function CircularProgress({
     return { strokeDashoffset };
   });
 
+  const gradientId = `circleGradient_${size}_${Math.round(circumference)}`;
+
   return (
     <View
       style={[styles.container, { width: size, height: size }]}
       accessible
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: 100, now: Math.round(normalizedProgress) }}
-      accessibilityLabel="Daily completion"
+      accessibilityLabel="Daily completion progress"
     >
       <Svg width={size} height={size} style={styles.svg}>
+        <Defs>
+          <LinearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={gradientColors ? gradientColors[0] : (color || theme.primaryLight)} />
+            <Stop offset="100%" stopColor={gradientColors ? gradientColors[1] : (color || theme.primary)} />
+          </LinearGradient>
+        </Defs>
+        {/* Track circle */}
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={trackColor || theme.border}
+          stroke={trackColor || theme.surfaceAlt}
           strokeWidth={strokeWidth}
           fill="none"
         />
+        {/* Animated Progress circle */}
         <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={color || theme.primary}
+          stroke={`url(#${gradientId})`}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           fill="none"
-          strokeDasharray={circumference}
+          strokeDasharray={`${circumference} ${circumference}`}
           animatedProps={animatedProps}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
@@ -89,6 +101,7 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   svg: {
     position: 'absolute',

@@ -1,7 +1,13 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, useReducedMotion } from 'react-native-reanimated';
-import { Bell, Check, Flame, Plus } from 'lucide-react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  useReducedMotion,
+} from 'react-native-reanimated';
+import { Check, Flame, Plus, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { Icon } from '@/components/IconHelper';
@@ -28,184 +34,189 @@ export function HabitItem({
   completion,
   onToggle,
   onPress,
-  compact,
-  readOnly,
-  dense,
-  animateProgress,
+  compact = false,
+  readOnly = false,
+  dense = false,
+  animateProgress = true,
   streak = 0,
   reminderTime,
-  reminderCount = 0,
 }: HabitItemProps) {
   const { theme } = useAppTheme();
   const hapticsEnabled = useHabitStore((state) => state.preferences.hapticsEnabled);
   const reduceMotion = useReducedMotion();
-  const isComplete = habit.type === 'boolean'
-    ? !!completion
-    : !!completion && completion.value >= habit.target;
-  const scale = useSharedValue(1);
-  const progressValue = useSharedValue(0);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  const animatedProgressStyle = useAnimatedStyle(() => ({
-    width: `${progressValue.value}%`,
-  }));
+  const isComplete =
+    habit.type === 'boolean'
+      ? !!completion
+      : !!completion && completion.value >= habit.target;
 
-  const handlePress = () => {
-    if (!reduceMotion) {
-      // Reanimated shared values are intentionally updated from this press handler.
-      // eslint-disable-next-line react-hooks/immutability
-      scale.value = withSpring(0.96, { damping: 15 }, () => {
-        scale.value = withSpring(1);
-      });
-    }
-    if (hapticsEnabled) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch((error) =>
-        console.warn('Habit completion haptic failed', error)
-      );
-    }
-    onToggle();
-  };
-
-  const progress =
+  const currentVal = completion?.value || 0;
+  const progressPercent =
     habit.type === 'boolean'
       ? isComplete
         ? 100
         : 0
-      : completion
-      ? Math.min(100, (completion.value / Math.max(1, habit.target)) * 100)
-      : 0;
-  const statusLabel = habit.archived
-    ? 'Archived'
-    : habit.paused
-    ? 'Paused'
-    : isComplete
-    ? 'Complete'
-    : progress > 0
-    ? 'In progress'
-    : 'Not started';
+      : Math.min(100, Math.round((currentVal / Math.max(1, habit.target)) * 100));
+
+  const scale = useSharedValue(1);
+  const progressAnim = useSharedValue(0);
 
   useEffect(() => {
     if (!animateProgress || reduceMotion) {
-      progressValue.value = progress;
+      progressAnim.value = progressPercent;
       return;
     }
-    progressValue.value = withTiming(progress, { duration: 220 });
-  }, [animateProgress, progress, progressValue, reduceMotion]);
+    progressAnim.value = withTiming(progressPercent, { duration: 300 });
+  }, [animateProgress, progressPercent, progressAnim, reduceMotion]);
+
+  const animatedCheckStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const animatedProgressStyle = useAnimatedStyle(() => ({
+    width: `${progressAnim.value}%`,
+  }));
+
+  const handleToggle = () => {
+    if (readOnly) return;
+    if (!reduceMotion) {
+      scale.value = withSpring(0.85, { damping: 10, stiffness: 300 }, (finished) => {
+        if (finished) scale.value = withSpring(1);
+      });
+    }
+    if (hapticsEnabled) {
+      void Haptics.impactAsync(
+        isComplete ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium
+      ).catch(() => {});
+    }
+    onToggle();
+  };
 
   return (
-    <Animated.View style={animatedStyle}>
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: theme.card,
-            borderColor: isComplete ? (dense ? theme.primary : habit.color) : theme.cardBorder,
-            borderWidth: dense ? 1 : 1.5,
-            paddingVertical: dense || compact ? 10 : 14,
-            paddingHorizontal: dense || compact ? 12 : 16,
-          },
-        ]}
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.card,
+          borderColor: isComplete
+            ? 'rgba(124, 92, 252, 0.45)'
+            : theme.cardBorder,
+          shadowColor: isComplete ? theme.primaryGlow : theme.shadow,
+        },
+      ]}
+    >
+      {/* Main pressable body */}
+      <Pressable
+        onPress={onPress || handleToggle}
+        style={({ pressed }) => [styles.mainPressable, { opacity: pressed ? 0.82 : 1 }]}
+        accessibilityRole="button"
+        accessibilityLabel={`${habit.name}, ${isComplete ? 'completed' : 'not completed'}`}
       >
-        <Pressable
-          onPress={onPress || handlePress}
-          style={({ pressed }) => [styles.main, dense && styles.denseMain, pressed && { opacity: 0.84 }]}
-          accessibilityRole="button"
-          accessibilityLabel={`${habit.name}${onPress ? ', habit options' : ', log completion'}`}
+        {/* Habit Icon Badge with gradient-like background */}
+        <View
+          style={[
+            styles.iconBadge,
+            {
+              backgroundColor: habit.color + '22',
+              borderColor: isComplete ? habit.color : habit.color + '44',
+            },
+          ]}
         >
-          <View style={[styles.iconWrap, dense && styles.denseIconWrap, { backgroundColor: habit.color + '22' }]}>
-            <Icon name={habit.icon} size={dense ? 20 : 22} color={habit.color} />
-          </View>
+          <Icon name={habit.icon} size={22} color={habit.color} strokeWidth={2.2} />
+        </View>
 
-          <View style={[styles.content, dense && styles.denseContent]}>
+        {/* Content details */}
+        <View style={styles.contentWrap}>
+          <View style={styles.titleRow}>
             <Text
-              style={[styles.name, { color: theme.text, fontSize: compact || dense ? 14 : 15 }]}
+              style={[
+                styles.habitName,
+                {
+                  color: isComplete ? theme.textSecondary : theme.text,
+                  textDecorationLine: isComplete && habit.type === 'boolean' ? 'line-through' : 'none',
+                },
+              ]}
               numberOfLines={1}
             >
               {habit.name}
             </Text>
-            {habit.type !== 'boolean' && (
-              <Text style={[styles.target, { color: theme.textSecondary }]} numberOfLines={1}>
-                {completion ? completion.value : 0}/{habit.target} {habit.unit}
-              </Text>
-            )}
-            {habit.type === 'boolean' && !compact && (
-              <Text style={[styles.target, { color: theme.textSecondary }]} numberOfLines={1}>
-                {habit.description}
-              </Text>
-            )}
-            {habit.type !== 'boolean' && (
-              <View
-                style={[styles.progressTrack, { backgroundColor: theme.surfaceAlt }]}
-                accessible
-                accessibilityRole="progressbar"
-                accessibilityValue={{ min: 0, max: 100, now: Math.round(progress) }}
-                accessibilityLabel={`${habit.name} progress`}
-              >
-              {animateProgress ? (
-                <Animated.View style={[styles.progressFill, animatedProgressStyle, { backgroundColor: theme.primary }]} />
-              ) : (
-                <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: habit.color }]} />
-              )}
-              </View>
-            )}
-            {dense && (
-              <View style={styles.denseMeta}>
-              <Text
-                style={[
-                  styles.statusText,
-                  {
-                    color: isComplete
-                      ? theme.success
-                      : progress > 0
-                      ? theme.primary
-                      : theme.textMuted,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {statusLabel}
-              </Text>
-              {!!streak && (
-                <View style={styles.metaItem}>
-                  <Flame size={12} color={theme.warning} />
-                  <Text style={[styles.metaText, { color: theme.textSecondary }]}>{streak}d</Text>
-                </View>
-              )}
-              {!!reminderTime && (
-                <View style={styles.metaItem}>
-                  <Bell size={12} color={theme.textMuted} />
-                  <Text style={[styles.metaText, { color: theme.textSecondary }]}>
-                    {reminderTime}{reminderCount > 1 ? ` +${reminderCount - 1}` : ''}
-                  </Text>
-                </View>
-              )}
+
+            {/* Streak flame pill if active */}
+            {streak > 0 && (
+              <View style={[styles.streakBadge, { backgroundColor: theme.streakDim }]}>
+                <Flame size={12} color={theme.streak} />
+                <Text style={[styles.streakText, { color: theme.streak }]}>{streak}d</Text>
               </View>
             )}
           </View>
-        </Pressable>
+
+          {/* Subtitle / Numeric Progress */}
+          {habit.type !== 'boolean' ? (
+            <View style={styles.numericWrap}>
+              <View style={styles.progressTrack}>
+                <Animated.View
+                  style={[
+                    styles.progressBar,
+                    animatedProgressStyle,
+                    { backgroundColor: isComplete ? theme.success : habit.color },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.numericText, { color: theme.textSecondary }]}>
+                {currentVal}/{habit.target} {habit.unit}
+              </Text>
+            </View>
+          ) : !compact && habit.description ? (
+            <Text style={[styles.descText, { color: theme.textMuted }]} numberOfLines={1}>
+              {habit.description}
+            </Text>
+          ) : (
+            <View style={styles.metaRow}>
+              <Text style={[styles.catLabel, { color: habit.color }]}>
+                {habit.category}
+              </Text>
+              {reminderTime && (
+                <View style={styles.reminderRow}>
+                  <Clock size={11} color={theme.textMuted} />
+                  <Text style={[styles.reminderText, { color: theme.textMuted }]}>
+                    {reminderTime}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      </Pressable>
+
+      {/* Checkbox button */}
+      <Animated.View style={animatedCheckStyle}>
         <Pressable
-          onPress={handlePress}
+          onPress={handleToggle}
           disabled={readOnly}
-          style={({ pressed }) => [styles.checkBtn, dense && styles.denseCheckBtn, {
-            backgroundColor: isComplete ? habit.color : theme.surfaceAlt,
-            borderColor: isComplete ? habit.color : theme.border,
-          }, (pressed || readOnly) && { opacity: 0.55 }]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            isComplete ? `Undo ${habit.name}` : `Log ${habit.name}${habit.type === 'boolean' ? '' : ' progress'}`
-          }
+          style={({ pressed }) => [
+            styles.checkButton,
+            {
+              backgroundColor: isComplete
+                ? theme.primary
+                : theme.surfaceAlt,
+              borderColor: isComplete
+                ? theme.primary
+                : theme.border,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+          accessibilityRole="checkbox"
           accessibilityState={{ checked: isComplete }}
+          accessibilityLabel={`Mark ${habit.name} as ${isComplete ? 'incomplete' : 'complete'}`}
         >
           {isComplete ? (
-            <Check size={18} color="#fff" strokeWidth={3} />
-          ) : (
-            <Plus size={18} color={theme.textSecondary} strokeWidth={2.5} />
-          )}
+            <Check size={16} color="#FFFFFF" strokeWidth={3} />
+          ) : habit.type !== 'boolean' ? (
+            <Plus size={15} color={theme.textSecondary} strokeWidth={2.5} />
+          ) : null}
         </Pressable>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -213,88 +224,110 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.card,
-    gap: spacing.md,
+    borderWidth: 1.2,
+    elevation: 2,
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
   },
-  main: {
+  mainPressable: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    flex: 1,
+    marginRight: spacing.sm,
   },
-  denseMain: {
-    gap: 10,
-  },
-  iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+  iconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  denseIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-  },
-  content: {
+  contentWrap: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
-  denseContent: {
-    gap: 2,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  habitName: {
+    flex: 1,
+    fontFamily: 'Inter-Medium',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+  },
+  streakText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  numericWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
   },
   progressTrack: {
-    height: 3,
-    borderRadius: 2,
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
-    marginTop: 3,
   },
-  progressFill: {
+  progressBar: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: 3,
   },
-  name: {
+  numericText: {
     fontFamily: 'Inter-Medium',
+    fontSize: 12,
     fontWeight: '500',
   },
-  target: {
+  descText: {
     fontFamily: 'Inter-Regular',
     fontSize: 12,
   },
-  denseMeta: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 16,
-    gap: spacing.sm,
+    gap: 8,
   },
-  statusText: {
+  catLabel: {
     fontFamily: 'Inter-Medium',
     fontSize: 11,
-    flexShrink: 1,
+    fontWeight: '600',
   },
-  metaItem: {
+  reminderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
   },
-  metaText: {
+  reminderText: {
     fontFamily: 'Inter-Regular',
     fontSize: 11,
   },
-  checkBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
+  checkButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  denseCheckBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
   },
 });

@@ -1,9 +1,33 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Share, Alert, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Switch,
+  Share,
+  Alert,
+  TextInput,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  Moon, Sun, Bell, Vibrate, Calendar, Download, Trash2, Info,
-  ChevronRight, Flame, Zap, Target, User,
+  Moon,
+  Sun,
+  Bell,
+  Vibrate,
+  Calendar,
+  Download,
+  Trash2,
+  Info,
+  Flame,
+  Zap,
+  Target,
+  User,
+  CheckCircle,
+  Trophy,
+  ShieldAlert,
+  Sparkles,
 } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
@@ -12,20 +36,22 @@ import { Button } from '@/components/ui/Button';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Icon } from '@/components/IconHelper';
 import { getLevelFromXP } from '@/utils/date';
-import { spacing, typeScale } from '@/theme/tokens';
+import { spacing, radius } from '@/theme/tokens';
 
 export default function ProfileScreen() {
   const { theme, mode, toggle } = useAppTheme();
   const preferences = useHabitStore((s) => s.preferences);
   const stats = useHabitStore((s) => s.stats);
   const achievements = useHabitStore((s) => s.achievements);
-  const habits = useHabitStore((s) => s.habits);
   const updatePreferences = useHabitStore((s) => s.updatePreferences);
   const resetAllData = useHabitStore((s) => s.resetAllData);
+  const seedSampleData = useHabitStore((s) => s.seedSampleData);
   const exportData = useHabitStore((s) => s.exportData);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(preferences.userName);
 
   const levelInfo = getLevelFromXP(stats.xp);
   const unlockedAchievements = achievements.filter((a) => a.unlockedAt);
@@ -33,15 +59,20 @@ export default function ProfileScreen() {
   const handleExport = async () => {
     try {
       const data = exportData();
-      await Share.share({ message: data, title: 'HabitFlow Data Export' });
+      await Share.share({
+        message: data,
+        title: 'HabitFlow Backup Data',
+      });
     } catch {
-      Alert.alert('Export failed', 'Could not share data.');
+      Alert.alert('Export Failed', 'Could not open share sheet for export.');
     }
   };
 
-  const handleReset = () => {
-    setShowResetConfirm(false);
-    resetAllData();
+  const handleSaveName = async () => {
+    if (nameInput.trim()) {
+      await updatePreferences({ userName: nameInput.trim() });
+    }
+    setEditingName(false);
   };
 
   const handleNotificationPreference = async (enabled: boolean) => {
@@ -49,104 +80,203 @@ export default function ProfileScreen() {
       await updatePreferences({ notificationsEnabled: enabled });
     } catch {
       Alert.alert(
-        'Notifications unavailable',
-        'Allow HabitFlow to send notifications in your device settings to receive habit reminders.'
+        'Notifications Unavailable',
+        'Please grant notification permission in your Android device settings.'
       );
     }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 100 }}>
-        <Text style={[styles.title, { color: theme.text }]}>Profile</Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 110 }}
+      >
+        <Text style={[styles.title, { color: theme.text }]}>Settings & Profile</Text>
 
-        {/* Profile card */}
-        <Card style={{ marginBottom: 16, alignItems: 'center', paddingVertical: 24 }}>
-          <View style={[styles.avatar, { backgroundColor: theme.primaryDim, borderColor: theme.primary }]}>
-            <User size={32} color={theme.primary} />
-          </View>
-          <Text style={[styles.userName, { color: theme.text }]}>{preferences.userName === 'there' ? 'HabitFlow User' : preferences.userName}</Text>
-          <View style={styles.levelBadge}>
-            <Zap size={14} color={theme.accent} />
-            <Text style={[styles.levelText, { color: theme.accent }]}>Level {levelInfo.level}</Text>
+        {/* Profile Card */}
+        <Card
+          highlight
+          style={{
+            marginVertical: spacing.md,
+            paddingVertical: spacing.lg,
+            alignItems: 'center',
+            backgroundColor: theme.surface,
+          }}
+        >
+          {/* Avatar Ring */}
+          <View
+            style={[
+              styles.avatarWrap,
+              { backgroundColor: theme.primaryDim, borderColor: theme.primary },
+            ]}
+          >
+            <User size={36} color={theme.primaryLight} strokeWidth={2.2} />
           </View>
 
-          {/* Stats row */}
-          <View style={styles.profileStats}>
-            <View style={styles.profileStat}>
-              <Flame size={18} color={theme.warning} />
-              <Text style={[styles.profileStatValue, { color: theme.text }]}>{stats.currentStreak}</Text>
-              <Text style={[styles.profileStatLabel, { color: theme.textSecondary }]}>Streak</Text>
+          {/* User Name */}
+          <Pressable
+            onPress={() => setEditingName(true)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}
+          >
+            <Text style={[styles.userNameText, { color: theme.text }]}>
+              {preferences.userName === 'there' ? 'HabitFlow Athlete' : preferences.userName}
+            </Text>
+          </Pressable>
+
+          {/* Level Pill */}
+          <View style={[styles.levelPill, { backgroundColor: theme.xpDim, borderColor: theme.xp + '40' }]}>
+            <Zap size={13} color={theme.xp} />
+            <Text style={[styles.levelPillText, { color: theme.xp }]}>
+              Level {levelInfo.level} · {levelInfo.currentLevelXP}/{levelInfo.nextLevelXP} XP
+            </Text>
+          </View>
+
+          {/* XP Progress Track */}
+          <View style={styles.xpWrap}>
+            <View style={[styles.xpTrack, { backgroundColor: theme.surfaceAlt }]}>
+              <View
+                style={[
+                  styles.xpFill,
+                  { width: `${Math.round(levelInfo.progress * 100)}%`, backgroundColor: theme.primary },
+                ]}
+              />
             </View>
-            <View style={[styles.profileStatDivider, { backgroundColor: theme.border }]} />
-            <View style={styles.profileStat}>
-              <Zap size={18} color={theme.accent} />
-              <Text style={[styles.profileStatValue, { color: theme.text }]}>{stats.xp}</Text>
-              <Text style={[styles.profileStatLabel, { color: theme.textSecondary }]}>XP</Text>
+          </View>
+
+          {/* Stats Summary Bar */}
+          <View style={[styles.statsRow, { borderTopColor: theme.border }]}>
+            <View style={styles.statCol}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Flame size={16} color={theme.streak} />
+                <Text style={[styles.statNum, { color: theme.text }]}>{stats.currentStreak}d</Text>
+              </View>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Streak</Text>
             </View>
-            <View style={[styles.profileStatDivider, { backgroundColor: theme.border }]} />
-            <View style={styles.profileStat}>
-              <Target size={18} color={theme.success} />
-              <Text style={[styles.profileStatValue, { color: theme.text }]}>{stats.totalCompletions}</Text>
-              <Text style={[styles.profileStatLabel, { color: theme.textSecondary }]}>Done</Text>
+
+            <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+
+            <View style={styles.statCol}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Target size={16} color={theme.accent} />
+                <Text style={[styles.statNum, { color: theme.text }]}>{stats.totalCompletions}</Text>
+              </View>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Completed</Text>
+            </View>
+
+            <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+
+            <View style={styles.statCol}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Trophy size={16} color={theme.xp} />
+                <Text style={[styles.statNum, { color: theme.text }]}>{stats.perfectDays}</Text>
+              </View>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Perfect Days</Text>
             </View>
           </View>
         </Card>
 
-        {/* Name input */}
-        <Card style={{ marginBottom: 16 }}>
-          <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>Display Name</Text>
-          <ProfileNameInput theme={theme} value={preferences.userName} onSave={(v) => updatePreferences({ userName: v })} />
-        </Card>
-
-        {/* Appearance */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Appearance</Text>
-        <Card style={{ marginBottom: 16, padding: 0 }}>
-          <SettingRow
-            icon={mode === 'dark' ? <Moon size={20} color={theme.primary} /> : <Sun size={20} color={theme.warning} />}
-            label="Dark Theme"
-            theme={theme}
-            right={<Switch accessibilityLabel="Dark theme" value={mode === 'dark'} onValueChange={toggle} trackColor={{ true: theme.primary, false: theme.border }} />}
-          />
+        {/* Appearance Settings */}
+        <Text style={[styles.sectionHeading, { color: theme.text }]}>Appearance</Text>
+        <Card style={{ marginBottom: spacing.md, padding: 0, backgroundColor: theme.surface }}>
+          <View style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.primaryDim }]}>
+              {mode === 'dark' ? (
+                <Moon size={18} color={theme.primaryLight} />
+              ) : (
+                <Sun size={18} color={theme.warning} />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.text }]}>Dark Mode</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                {mode === 'dark' ? 'Obsidian Navy aesthetic' : 'Porcelain Slate aesthetic'}
+              </Text>
+            </View>
+            <Switch
+              value={mode === 'dark'}
+              onValueChange={toggle}
+              trackColor={{ true: theme.primary, false: theme.border }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
         </Card>
 
         {/* Preferences */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Preferences</Text>
-        <Card style={{ marginBottom: 16, padding: 0 }}>
-          <SettingRow
-            icon={<Bell size={20} color={theme.accent} />}
-            label="Notifications"
-            theme={theme}
-            helper="Schedule reminders for active habits."
-            right={<Switch accessibilityLabel="Habit reminders" value={preferences.notificationsEnabled} onValueChange={handleNotificationPreference} trackColor={{ true: theme.primary, false: theme.border }} />}
-          />
-          <SettingDivider theme={theme} />
-          <SettingRow
-            icon={<Vibrate size={20} color={theme.primary} />}
-            label="Haptic Feedback"
-            theme={theme}
-            right={<Switch accessibilityLabel="Haptic feedback" value={preferences.hapticsEnabled} onValueChange={(v) => updatePreferences({ hapticsEnabled: v })} trackColor={{ true: theme.primary, false: theme.border }} />}
-          />
-          <SettingDivider theme={theme} />
-          <SettingRow
-            icon={<Calendar size={20} color={theme.success} />}
-            label="Week Starts On"
-            theme={theme}
-            right={
-              <Pressable
-                onPress={() => updatePreferences({ weekStart: preferences.weekStart === 0 ? 1 : 0 })}
-                accessibilityRole="button"
-                accessibilityLabel={`Week starts on ${preferences.weekStart === 0 ? 'Sunday' : 'Monday'}. Change week start day`}
-              >
-                <Text style={[styles.settingValue, { color: theme.textSecondary }]}>{preferences.weekStart === 0 ? 'Sunday' : 'Monday'}</Text>
-              </Pressable>
-            }
-          />
+        <Text style={[styles.sectionHeading, { color: theme.text }]}>Preferences</Text>
+        <Card style={{ marginBottom: spacing.md, padding: 0, backgroundColor: theme.surface }}>
+          <View style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.accentDim }]}>
+              <Bell size={18} color={theme.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.text }]}>Reminders & Alerts</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                Daily local notifications on Android
+              </Text>
+            </View>
+            <Switch
+              value={preferences.notificationsEnabled}
+              onValueChange={handleNotificationPreference}
+              trackColor={{ true: theme.primary, false: theme.border }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+
+          <View style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.primaryDim }]}>
+              <Vibrate size={18} color={theme.primaryLight} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.text }]}>Haptic Feedback</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                Tactile feedback when logging habits
+              </Text>
+            </View>
+            <Switch
+              value={preferences.hapticsEnabled}
+              onValueChange={(v) => updatePreferences({ hapticsEnabled: v })}
+              trackColor={{ true: theme.primary, false: theme.border }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+
+          <View style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.xpDim }]}>
+              <Calendar size={18} color={theme.xp} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.text }]}>First Day of Week</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                {preferences.weekStart === 1 ? 'Monday' : 'Sunday'}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => updatePreferences({ weekStart: preferences.weekStart === 1 ? 0 : 1 })}
+              style={[styles.weekPill, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}
+            >
+              <Text style={[styles.weekPillText, { color: theme.primaryLight }]}>
+                {preferences.weekStart === 1 ? 'Mon' : 'Sun'}
+              </Text>
+            </Pressable>
+          </View>
         </Card>
 
-        {/* Achievements */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Achievements ({unlockedAchievements.length}/{achievements.length})</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+        {/* Achievements Showcase */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.xs, marginBottom: spacing.sm }}>
+          <Text style={[styles.sectionHeading, { color: theme.text, marginBottom: 0 }]}>
+            Achievements
+          </Text>
+          <Text style={[styles.achievementRatio, { color: theme.primaryLight }]}>
+            {unlockedAchievements.length} / {achievements.length} Unlocked
+          </Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.lg }}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             {achievements.map((ach) => {
               const isUnlocked = !!ach.unlockedAt;
@@ -156,142 +286,132 @@ export default function ProfileScreen() {
                   style={[
                     styles.achievementCard,
                     {
-                      backgroundColor: isUnlocked ? theme.primaryDim : theme.card,
+                      backgroundColor: theme.surface,
                       borderColor: isUnlocked ? theme.primary : theme.cardBorder,
-                      opacity: isUnlocked ? 1 : 0.5,
+                      opacity: isUnlocked ? 1 : 0.6,
                     },
                   ]}
                 >
-                  <View style={[styles.achievementIcon, { backgroundColor: isUnlocked ? theme.primary + '22' : theme.surfaceAlt }]}>
-                    <Icon name={ach.icon} size={24} color={isUnlocked ? theme.primary : theme.textMuted} />
+                  <View
+                    style={[
+                      styles.achievementIcon,
+                      { backgroundColor: isUnlocked ? theme.primary + '25' : theme.surfaceAlt },
+                    ]}
+                  >
+                    <Icon name={ach.icon} size={22} color={isUnlocked ? theme.primaryLight : theme.textMuted} />
                   </View>
-                  <Text style={[styles.achievementTitle, { color: theme.text }]} numberOfLines={1}>{ach.title}</Text>
-                  <Text style={[styles.achievementDesc, { color: theme.textSecondary }]} numberOfLines={2}>{ach.description}</Text>
-                  {isUnlocked ? (
-                    <Text style={[styles.achievementStatus, { color: theme.primary }]}>Unlocked</Text>
-                  ) : (
-                    <Text style={[styles.achievementStatus, { color: theme.textMuted }]}>Locked</Text>
-                  )}
+                  <Text style={[styles.achTitle, { color: theme.text }]} numberOfLines={1}>
+                    {ach.title}
+                  </Text>
+                  <Text style={[styles.achDesc, { color: theme.textSecondary }]} numberOfLines={2}>
+                    {ach.description}
+                  </Text>
+                  <View style={[styles.achStatusPill, { backgroundColor: isUnlocked ? theme.successDim : theme.surfaceAlt }]}>
+                    <Text style={[styles.achStatusText, { color: isUnlocked ? theme.success : theme.textMuted }]}>
+                      {isUnlocked ? 'Unlocked' : 'In Progress'}
+                    </Text>
+                  </View>
                 </View>
               );
             })}
           </View>
         </ScrollView>
 
-        {/* Data */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Data & Backup</Text>
-        <Card style={{ marginBottom: 16, padding: 0 }}>
-          <PressableRow icon={<Download size={20} color={theme.accent} />} label="Export Data" theme={theme} onPress={handleExport} />
-          <SettingDivider theme={theme} />
-          <PressableRow icon={<Trash2 size={20} color={theme.error} />} label="Reset All Data" theme={theme} onPress={() => setShowResetConfirm(true)} danger />
+        {/* Data & Backup Management */}
+        <Text style={[styles.sectionHeading, { color: theme.text }]}>Data & Backup</Text>
+        <Card style={{ marginBottom: spacing.md, padding: 0, backgroundColor: theme.surface }}>
+          <Pressable onPress={handleExport} style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.primaryDim }]}>
+              <Download size={18} color={theme.primaryLight} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.text }]}>Export Data</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                Share or backup your habits in JSON format
+              </Text>
+            </View>
+          </Pressable>
+
+          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+
+          <Pressable onPress={() => seedSampleData()} style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.accentDim }]}>
+              <Sparkles size={18} color={theme.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.text }]}>Load Sample Habits</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                Add sample fitness, health and productivity habits
+              </Text>
+            </View>
+          </Pressable>
+
+          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+
+          <Pressable onPress={() => setShowResetConfirm(true)} style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.errorDim }]}>
+              <Trash2 size={18} color={theme.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.error }]}>Reset All Data</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                Erase local AsyncStorage habits and completions
+              </Text>
+            </View>
+          </Pressable>
         </Card>
 
-        {/* About */}
-        <Card style={{ marginBottom: 16, padding: 0 }}>
-          <PressableRow icon={<Info size={20} color={theme.textSecondary} />} label="About HabitFlow" theme={theme} onPress={() => setShowAbout(true)} />
-        </Card>
-
-        <Text style={[styles.versionText, { color: theme.textMuted }]}>HabitFlow v1.0.0</Text>
+        {/* App Info Footer */}
+        <View style={styles.appFooter}>
+          <Text style={[styles.appName, { color: theme.textMuted }]}>
+            HabitFlow · Production Android Build v1.0.0
+          </Text>
+          <Text style={[styles.appSub, { color: theme.textMuted }]}>
+            Engineered with React Native & Expo Router
+          </Text>
+        </View>
       </ScrollView>
 
-      {/* Reset confirm */}
-      <ModalSheet visible={showResetConfirm} onClose={() => setShowResetConfirm(false)} title="Reset All Data?">
-        <View style={{ gap: 16 }}>
-          <Text style={[styles.confirmText, { color: theme.textSecondary }]}>
-            This will permanently delete all your habits, completion history, achievements, and settings. This action cannot be undone.
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Button title="Cancel" variant="secondary" onPress={() => setShowResetConfirm(false)} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button title="Reset Everything" onPress={handleReset} />
-            </View>
-          </View>
+      {/* Edit Name Modal */}
+      <ModalSheet visible={editingName} onClose={() => setEditingName(false)} title="Change Display Name">
+        <View style={{ gap: spacing.md }}>
+          <TextInput
+            value={nameInput}
+            onChangeText={setNameInput}
+            placeholder="Your name"
+            placeholderTextColor={theme.textMuted}
+            style={[styles.nameInputBox, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
+          />
+          <Button title="Save Name" variant="primary" onPress={handleSaveName} />
         </View>
       </ModalSheet>
 
-      {/* About modal */}
-      <ModalSheet visible={showAbout} onClose={() => setShowAbout(false)} title="About HabitFlow">
-        <View style={{ gap: 16 }}>
-          <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-            <View style={[styles.aboutIcon, { backgroundColor: theme.primaryDim }]}>
-              <Flame size={40} color={theme.primary} />
-            </View>
-            <Text style={[styles.aboutTitle, { color: theme.text }]}>HabitFlow</Text>
-            <Text style={[styles.aboutVersion, { color: theme.textSecondary }]}>Version 1.0.0</Text>
+      {/* Confirm Reset Modal */}
+      <ModalSheet visible={showResetConfirm} onClose={() => setShowResetConfirm(false)} title="Confirm Reset">
+        <View style={{ gap: spacing.md }}>
+          <View style={[styles.warningBox, { backgroundColor: theme.errorDim, borderColor: theme.error }]}>
+            <ShieldAlert size={22} color={theme.error} />
+            <Text style={[styles.warningText, { color: theme.error }]}>
+              This will permanently delete all your habit data, completion history, and streak records.
+            </Text>
           </View>
-          <Text style={[styles.aboutText, { color: theme.textSecondary }]}>
-            HabitFlow is a premium habit tracking application designed to help you build better routines through tracking, analytics, and gamification. All your data is stored locally on your device for complete privacy.
-          </Text>
-          <View style={{ gap: 8 }}>
-            <AboutRow label="Habits tracked" value={`${habits.length}`} theme={theme} />
-            <AboutRow label="Total completions" value={`${stats.totalCompletions}`} theme={theme} />
-            <AboutRow label="Longest streak" value={`${stats.longestStreak} days`} theme={theme} />
-            <AboutRow label="Perfect days" value={`${stats.perfectDays}`} theme={theme} />
-            <AboutRow label="Achievements" value={`${unlockedAchievements.length}/${achievements.length}`} theme={theme} />
-          </View>
+
+          <Button
+            title="Yes, Reset Everything"
+            variant="danger"
+            onPress={async () => {
+              await resetAllData();
+              setShowResetConfirm(false);
+            }}
+          />
+          <Button
+            title="Cancel"
+            variant="secondary"
+            onPress={() => setShowResetConfirm(false)}
+          />
         </View>
       </ModalSheet>
     </SafeAreaView>
-  );
-}
-
-function ProfileNameInput({ theme, value, onSave }: { theme: any; value: string; onSave: (v: string) => void }) {
-  const [name, setName] = useState(value === 'there' ? '' : value);
-  return (
-    <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-      <TextInput
-        style={[styles.nameInput, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-        value={name}
-        onChangeText={setName}
-        placeholder="Enter your name"
-        placeholderTextColor={theme.textMuted}
-      />
-      <Button title="Save" size="sm" onPress={() => onSave(name.trim() || 'there')} disabled={!name.trim() && value === 'there'} />
-    </View>
-  );
-}
-
-function SettingRow({ icon, label, theme, right, helper }: { icon: React.ReactNode; label: string; theme: any; right?: React.ReactNode; helper?: string }) {
-  return (
-    <View style={styles.settingRow}>
-      <View style={styles.settingLeft}>
-        {icon}
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.settingLabel, { color: theme.text }]}>{label}</Text>
-          {helper && <Text style={[styles.settingHelper, { color: theme.textMuted }]}>{helper}</Text>}
-        </View>
-      </View>
-      {right}
-    </View>
-  );
-}
-
-function PressableRow({ icon, label, theme, onPress, danger }: { icon: React.ReactNode; label: string; theme: any; onPress: () => void; danger?: boolean }) {
-  return (
-    <Pressable onPress={onPress} style={(state) => ({ opacity: state.pressed ? 0.7 : 1 })}>
-      <View style={styles.settingRow}>
-        <View style={styles.settingLeft}>
-          {icon}
-          <Text style={[styles.settingLabel, { color: danger ? theme.error : theme.text }]}>{label}</Text>
-        </View>
-        <ChevronRight size={18} color={theme.textMuted} />
-      </View>
-    </Pressable>
-  );
-}
-
-function SettingDivider({ theme }: { theme: any }) {
-  return <View style={[styles.divider, { backgroundColor: theme.border }]} />;
-}
-
-function AboutRow({ label, value, theme }: { label: string; value: string; theme: any }) {
-  return (
-    <View style={styles.aboutRow}>
-      <Text style={[styles.aboutRowLabel, { color: theme.textSecondary }]}>{label}</Text>
-      <Text style={[styles.aboutRowValue, { color: theme.text }]}>{value}</Text>
-    </View>
   );
 }
 
@@ -299,12 +419,11 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   title: {
     fontFamily: 'Inter-Bold',
-    fontSize: typeScale.screenTitle,
+    fontSize: 24,
     fontWeight: '700',
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: spacing.md,
   },
-  avatar: {
+  avatarWrap: {
     width: 72,
     height: 72,
     borderRadius: 36,
@@ -312,182 +431,181 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  userName: {
+  userNameText: {
     fontFamily: 'Inter-Bold',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    marginTop: 12,
   },
-  levelBadge: {
+  levelPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
+    gap: 4,
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 16,
-    backgroundColor: 'rgba(34,211,238,0.1)',
-  },
-  levelText: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  profileStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 20,
-    gap: 8,
-  },
-  profileStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  profileStatValue: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 20,
-    fontWeight: '700',
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
     marginTop: 6,
   },
-  profileStatLabel: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  profileStatDivider: {
-    width: 1,
-    height: 36,
-  },
-  settingLabel: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  settingHelper: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 3,
-  },
-  settingValue: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-  },
-  nameInput: {
-    flex: 1,
-    fontFamily: 'Inter-Regular',
-    fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  sectionTitle: {
+  levelPillText: {
     fontFamily: 'Inter-Bold',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-    marginTop: 4,
+    fontSize: 11,
   },
-  settingRow: {
+  xpWrap: {
+    width: '80%',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  xpTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  xpFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    width: '100%',
+    borderTopWidth: 1,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
   },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  statCol: {
     flex: 1,
-  },
-  divider: {
-    height: 1,
-    marginHorizontal: 16,
-  },
-  achievementCard: {
-    width: 130,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    padding: 14,
     alignItems: 'center',
+    gap: 2,
   },
-  achievementIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  achievementTitle: {
+  statNum: {
     fontFamily: 'Inter-Bold',
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: '700',
-    textAlign: 'center',
   },
-  achievementDesc: {
+  statLabel: {
     fontFamily: 'Inter-Regular',
     fontSize: 11,
-    marginTop: 4,
-    textAlign: 'center',
-    minHeight: 28,
   },
-  achievementStatus: {
+  statDivider: {
+    width: 1,
+    height: 28,
+  },
+  sectionHeading: {
     fontFamily: 'Inter-Bold',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  versionText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  confirmText: {
-    fontFamily: 'Inter-Regular',
     fontSize: 15,
-    lineHeight: 22,
+    fontWeight: '700',
+    marginBottom: 8,
+    marginTop: spacing.xs,
   },
-  aboutIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
+  achievementRatio: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: 12,
+  },
+  settingIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  aboutTitle: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 12,
-  },
-  aboutVersion: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  aboutText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  aboutRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  aboutRowLabel: {
+  settingTitle: {
     fontFamily: 'Inter-Medium',
     fontSize: 14,
+    fontWeight: '600',
   },
-  aboutRowValue: {
+  settingSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    marginTop: 1,
+  },
+  rowDivider: {
+    height: 1,
+    marginLeft: 60,
+  },
+  weekPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  weekPillText: {
     fontFamily: 'Inter-Bold',
-    fontSize: 14,
+    fontSize: 12,
+  },
+  achievementCard: {
+    width: 145,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    gap: 6,
+  },
+  achievementIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  achTitle: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 13,
     fontWeight: '700',
+  },
+  achDesc: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  achStatusPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    marginTop: 2,
+  },
+  achStatusText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 9,
+  },
+  nameInputBox: {
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    fontFamily: 'Inter-Medium',
+    fontSize: 15,
+  },
+  warningBox: {
+    flexDirection: 'row',
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: 12,
+  },
+  warningText: {
+    flex: 1,
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  appFooter: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    gap: 2,
+  },
+  appName: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+  },
+  appSub: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
   },
 });

@@ -6,32 +6,52 @@ import { Reminder, Habit } from '@/types';
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => ({
     shouldShowAlert: true,
-    shouldPlaySound: notification.request.content.sound !== null,
+    shouldPlaySound: notification?.request?.content?.sound !== null,
     shouldSetBadge: false,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
 });
 
+if (Platform.OS === 'android') {
+  Notifications.setNotificationChannelAsync('default', {
+    name: 'Habit Reminders',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#7C5CFC',
+  }).catch((err) => {
+    console.warn('Failed to configure Android notification channel', err);
+  });
+}
+
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === 'granted') return true;
-  const { status } = await Notifications.requestPermissionsAsync();
-  return status === 'granted';
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === 'granted') return true;
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === 'granted';
+  } catch (e) {
+    console.warn('Failed to request notification permissions', e);
+    return false;
+  }
 }
 
 export async function hasNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
-  const { status } = await Notifications.getPermissionsAsync();
-  return status === 'granted';
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
 }
 
 export async function scheduleHabitReminder(
   habit: Habit,
   reminder: Reminder
 ): Promise<string[]> {
-  if (!reminder.enabled) return [];
+  if (!reminder.enabled || Platform.OS === 'web') return [];
   const [hours, minutes] = reminder.time.split(':').map(Number);
   if (
     !Number.isInteger(hours) ||
@@ -49,12 +69,13 @@ export async function scheduleHabitReminder(
     const weekdays = [...new Set(reminder.days)];
     const triggers: NotificationTriggerInput[] =
       weekdays.length === 0 || weekdays.length === 7
-        ? [{ type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: hours, minute: minutes }]
+        ? [{ type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: hours, minute: minutes, channelId: 'default' }]
         : weekdays.map((day) => ({
             type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
             weekday: day === 0 ? 1 : day + 1,
             hour: hours,
             minute: minutes,
+            channelId: 'default',
           }));
 
     return await Promise.all(

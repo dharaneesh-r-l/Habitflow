@@ -44,13 +44,19 @@ npm install
 ### Running the App
 
 ```bash
-# Start the Expo dev server
+# Start the Expo dev server (works across all platforms)
+npm start
+# or
 npm run dev
 
-# Or start with a specific platform
+# Run directly for Android mobile / emulator
+npm run android
+# or
 npx expo start --android
-npx expo start --ios
-npx expo start --web
+
+# Run for iOS or Web
+npm run ios
+npm run web
 ```
 
 ### Build for Production

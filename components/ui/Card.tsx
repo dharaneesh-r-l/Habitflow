@@ -1,19 +1,35 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, Pressable } from 'react-native';
+import { View, StyleSheet, StyleProp, ViewStyle, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { radius } from '@/theme/tokens';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   gradient?: boolean;
+  elevated?: boolean;
+  highlight?: boolean;
   onPress?: () => void;
   padding?: number;
 }
 
-export function Card({ children, style, gradient, onPress, padding = 16 }: CardProps) {
+export function Card({
+  children,
+  style,
+  gradient,
+  elevated = false,
+  highlight = false,
+  onPress,
+  padding = 16,
+}: CardProps) {
   const { theme } = useAppTheme();
+
+  const borderColor = highlight
+    ? theme.cardBorderHighlight
+    : theme.cardBorder;
+
+  const backgroundColor = elevated ? theme.surfaceElevated : theme.card;
 
   const content = gradient ? (
     <LinearGradient
@@ -25,14 +41,30 @@ export function Card({ children, style, gradient, onPress, padding = 16 }: CardP
       {children}
     </LinearGradient>
   ) : (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder, padding, borderRadius: radius.card, shadowColor: theme.shadow }, style]}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor,
+          borderColor,
+          padding,
+          borderRadius: radius.card,
+          shadowColor: theme.shadow,
+        },
+        style,
+      ]}
+    >
       {children}
     </View>
   );
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} accessibilityRole="button" style={(state) => ({ opacity: state.pressed ? 0.88 : 1 })}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}
+      >
         {content}
       </Pressable>
     );
@@ -44,9 +76,9 @@ const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
     overflow: 'hidden',
-    elevation: 2,
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
 });

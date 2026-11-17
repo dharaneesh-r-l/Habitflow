@@ -12,7 +12,7 @@ import {
 import { SplashScreen } from 'expo-router';
 import { ThemeProvider as NavThemeProvider } from '@/theme/ThemeProvider';
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export function ThemeBootstrap({ children }: { children: React.ReactNode }) {
   return <NavThemeProvider>{children}</NavThemeProvider>;
@@ -27,7 +27,7 @@ export function useLoadFonts() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
 

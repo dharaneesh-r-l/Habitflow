@@ -5,9 +5,15 @@ type IconMap = Record<string, ComponentType<any>>;
 
 const iconMap: IconMap = (LucideIcons as any) as IconMap;
 
+const FallbackIcon: ComponentType<any> = (props) => {
+  const CircleIcon = iconMap['Circle'];
+  return CircleIcon ? React.createElement(CircleIcon, props) : null;
+};
+
 export function getIcon(name: string): ComponentType<any> {
+  if (!name) return FallbackIcon;
   const cleaned = name.replace(/Icon$/, '');
-  return iconMap[cleaned] || iconMap['Circle'];
+  return iconMap[cleaned] || FallbackIcon;
 }
 
 export const Icon = ({

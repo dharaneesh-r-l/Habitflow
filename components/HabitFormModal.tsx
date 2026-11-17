@@ -1,14 +1,31 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Switch, FlatList, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Button } from '@/components/ui/Button';
 import { useAppTheme } from '@/theme/ThemeContext';
-import { Habit, HabitCategory, HabitType, Frequency, DayOfWeek, RoutinePeriod, Reminder, CATEGORIES, CATEGORY_COLORS } from '@/types';
+import {
+  Habit,
+  HabitCategory,
+  HabitType,
+  Frequency,
+  DayOfWeek,
+  RoutinePeriod,
+  Reminder,
+  CATEGORIES,
+} from '@/types';
 import { HABIT_LIBRARY } from '@/data/habitLibrary';
 import { Icon } from '@/components/IconHelper';
 import { uid } from '@/utils/date';
-import { Plus, Trash2 } from 'lucide-react-native';
-import { spacing } from '@/theme/tokens';
+import { Plus, Trash2, BookOpen, Clock, Sunrise, Sun, Moon, Star } from 'lucide-react-native';
+import { spacing, radius } from '@/theme/tokens';
 
 interface HabitFormProps {
   initialHabit?: Habit;
@@ -23,15 +40,44 @@ const HABIT_TYPES: { value: HabitType; label: string }[] = [
   { value: 'target', label: 'Target' },
 ];
 
-const ROUTINE_OPTIONS: (RoutinePeriod | null)[] = [null, 'morning', 'afternoon', 'evening', 'night'];
-const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const ICON_CHOICES = [
-  'Footprints', 'Dumbbell', 'Flower2', 'Activity', 'Droplets', 'Moon', 'Pill', 'Brain',
-  'Wind', 'BookOpen', 'Languages', 'Code', 'PlayCircle', 'PenLine', 'ClipboardList',
-  'Users', 'TrendingUp', 'FileText', 'Inbox', 'Target', 'CheckSquare', 'Zap', 'Clock',
-  'Mail', 'Heart', 'Sparkles', 'Smartphone', 'Smile', 'Mood', 'Coffee', 'Apple', 'Ban',
-  'ChefHat', 'Scale', 'Receipt', 'PiggyBank', 'Wallet', 'LineChart', 'Scissors', 'Trash2',
+const ROUTINE_OPTIONS: { period: RoutinePeriod | null; label: string; icon: any }[] = [
+  { period: null, label: 'Anytime', icon: Clock },
+  { period: 'morning', label: 'Morning', icon: Sunrise },
+  { period: 'afternoon', label: 'Afternoon', icon: Sun },
+  { period: 'evening', label: 'Evening', icon: Moon },
+  { period: 'night', label: 'Night', icon: Star },
 ];
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const COLOR_CHOICES = [
+  '#7C5CFC', // HabitFlow Violet
+  '#06D6A0', // Emerald Cyan
+  '#FF6B6B', // Coral Red
+  '#4ECDC4', // Mint Turquoise
+  '#45B7D1', // Sky Cerulean
+  '#FFA07A', // Warm Salmon
+  '#B084F2', // Lavender
+  '#F7B801', // Golden Amber
+  '#F6416C', // Rose Pink
+  '#3B82F6', // Royal Blue
+];
+
+const ICON_CHOICES = [
+  'Target', 'Zap', 'Flame', 'Activity', 'Footprints', 'Dumbbell', 'Flower2',
+  'Droplets', 'Moon', 'Pill', 'Brain', 'Wind', 'BookOpen', 'Languages',
+  'Code', 'PlayCircle', 'PenLine', 'ClipboardList', 'Users', 'TrendingUp',
+  'FileText', 'Inbox', 'CheckSquare', 'Clock', 'Mail', 'Heart', 'Sparkles',
+  'Smartphone', 'Smile', 'SmilePlus', 'Coffee', 'Apple', 'Ban', 'ChefHat',
+  'Scale', 'PiggyBank', 'Wallet', 'LineChart', 'Trash2',
+];
+
+const COMMON_UNITS: Record<HabitType, string[]> = {
+  boolean: ['done'],
+  count: ['times', 'reps', 'glasses', 'pages', 'items'],
+  duration: ['minutes', 'hours', 'sessions'],
+  target: ['steps', 'calories', 'words', 'points'],
+};
 
 export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps) {
   const { theme } = useAppTheme();
@@ -47,8 +93,6 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
   const [icon, setIcon] = useState(initialHabit?.icon || 'Target');
   const [routine, setRoutine] = useState<RoutinePeriod | null>(initialHabit?.routine || null);
   const [reminders, setReminders] = useState<Reminder[]>(initialHabit?.reminders || []);
-  const [showIconPicker, setShowIconPicker] = useState(false);
-  const [showColorPicker, setShowColorPicker] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -59,15 +103,18 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
   };
 
   const addReminder = () => {
-    setReminders([...reminders, {
-      id: uid(),
-      time: '08:00',
-      days: frequency === 'daily' ? [] : daysOfWeek,
-      enabled: true,
-      title: name || 'Habit',
-      message: `Time for ${name}`,
-      sound: true,
-    }]);
+    setReminders([
+      ...reminders,
+      {
+        id: uid(),
+        time: '08:00',
+        days: frequency === 'daily' ? [] : daysOfWeek,
+        enabled: true,
+        title: name || 'Habit',
+        message: `Time for ${name || 'your habit'}`,
+        sound: true,
+      },
+    ]);
   };
 
   const updateReminder = (id: string, updates: Partial<Reminder>) => {
@@ -90,23 +137,36 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
     setColor(lib.color);
     setIcon(lib.icon);
     setRoutine(lib.routine);
-    setReminders(lib.suggestedReminders.map((r) => ({ id: uid(), time: r.time, days: lib.daysOfWeek as DayOfWeek[], enabled: true, title: lib.name, message: r.message, sound: true })));
+    setReminders(
+      lib.suggestedReminders.map((r) => ({
+        id: uid(),
+        time: r.time,
+        days: lib.daysOfWeek as DayOfWeek[],
+        enabled: true,
+        title: lib.name,
+        message: r.message,
+        sound: true,
+      }))
+    );
     setShowLibrary(false);
   };
 
   const handleSave = async () => {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      Alert.alert('Habit name required', 'Please enter a name for this habit.');
+      return;
+    }
     const targetValue = Number(target);
     if (type !== 'boolean' && (!Number.isFinite(targetValue) || targetValue <= 0)) {
-      Alert.alert('Check your target', 'Enter a number greater than zero.');
+      Alert.alert('Check your goal', 'Enter a numeric target greater than zero.');
       return;
     }
     if (frequency !== 'daily' && daysOfWeek.length === 0) {
       Alert.alert('Choose a schedule', 'Select at least one day for this habit.');
       return;
     }
-    if (reminders.some((reminder) => reminder.enabled && !/^([01]\d|2[0-3]):[0-5]\d$/.test(reminder.time))) {
-      Alert.alert('Check reminder time', 'Use 24-hour time in HH:mm format, such as 08:30.');
+    if (reminders.some((r) => r.enabled && !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time))) {
+      Alert.alert('Check reminder time', 'Please use 24-hour format (e.g. 08:30).');
       return;
     }
 
@@ -129,412 +189,455 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
         paused: initialHabit?.paused || false,
         reminders,
       });
+      onClose();
     } catch {
-      Alert.alert('Could not save habit', 'Please try again. Your changes have not been confirmed.');
+      Alert.alert('Could not save', 'Please check your inputs and try again.');
+    } finally {
       setSaving(false);
-      return;
     }
-    setSaving(false);
-    onClose();
   };
 
+  if (showLibrary) {
+    return (
+      <ModalSheet visible onClose={() => setShowLibrary(false)} title="Habit Templates">
+        <View style={{ gap: spacing.md }}>
+          <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+            Pick from curated, science-backed habits to get started instantly.
+          </Text>
+          {HABIT_LIBRARY.map((lib, i) => (
+            <Pressable
+              key={i}
+              onPress={() => applyLibraryHabit(lib)}
+              style={({ pressed }) => [
+                styles.libCard,
+                { backgroundColor: theme.surfaceAlt, borderColor: theme.border, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={[styles.libIconWrap, { backgroundColor: lib.color + '22' }]}>
+                <Icon name={lib.icon} size={22} color={lib.color} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[styles.libName, { color: theme.text }]}>{lib.name}</Text>
+                <Text style={[styles.libDesc, { color: theme.textSecondary }]}>{lib.description}</Text>
+                <Text style={[styles.libMeta, { color: lib.color }]}>
+                  {lib.category} · {lib.type === 'boolean' ? 'Daily check-in' : `${lib.target} ${lib.unit}`}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      </ModalSheet>
+    );
+  }
+
   return (
-    <ModalSheet visible onClose={onClose} title={initialHabit ? 'Edit Habit' : 'New Habit'}>
+    <ModalSheet visible onClose={onClose} title={initialHabit ? 'Edit Habit' : 'Create New Habit'}>
       <View style={{ gap: spacing.lg }}>
-        {/* Library button */}
         {!initialHabit && (
-          <Button title="Browse Habit Library" variant="outline" onPress={() => setShowLibrary(true)} />
+          <Button
+            title="Browse Habit Templates"
+            variant="secondary"
+            icon={<BookOpen size={18} color={theme.primaryLight} />}
+            onPress={() => setShowLibrary(true)}
+          />
         )}
 
-        {/* Name */}
-        <View>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Name</Text>
+        {/* Habit Name */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Habit Name</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
             value={name}
             onChangeText={setName}
-            placeholder="e.g. Morning Run"
+            placeholder="e.g. Read 30 minutes, Morning workout..."
             placeholderTextColor={theme.textMuted}
+            style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
           />
         </View>
 
         {/* Description */}
-        <View>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Description</Text>
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Motivation / Description (Optional)</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
             value={description}
             onChangeText={setDescription}
-            placeholder="What does this habit help with?"
+            placeholder="Why do you want to build this habit?"
             placeholderTextColor={theme.textMuted}
-            multiline
+            style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
           />
         </View>
 
-        {/* Category */}
-        <View>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-            <View style={{ gap: 8, flexDirection: 'row' }}>
-              {CATEGORIES.map((cat) => (
-                <Pressable
-                  key={cat}
-                  onPress={() => {
-                    setCategory(cat);
-                    setColor(CATEGORY_COLORS[cat]);
-                  }}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: category === cat ? CATEGORY_COLORS[cat] + '22' : theme.inputBg,
-                      borderColor: category === cat ? CATEGORY_COLORS[cat] : theme.border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.chipText, { color: category === cat ? CATEGORY_COLORS[cat] : theme.textSecondary }]}>{cat}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* Type */}
-        <View>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Habit Type</Text>
-          <View style={styles.typeRow}>
+        {/* Habit Type Segmented Control */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Habit Type</Text>
+          <View style={[styles.segmentContainer, { backgroundColor: theme.surfaceAlt }]}>
             {HABIT_TYPES.map((t) => (
               <Pressable
                 key={t.value}
-                onPress={() => setType(t.value)}
+                onPress={() => {
+                  setType(t.value);
+                  setUnit(COMMON_UNITS[t.value][0]);
+                }}
                 style={[
-                  styles.typeChip,
-                  { backgroundColor: type === t.value ? theme.primary : theme.inputBg, borderColor: type === t.value ? theme.primary : theme.border },
+                  styles.segmentBtn,
+                  {
+                    backgroundColor: type === t.value ? theme.primary : 'transparent',
+                  },
                 ]}
               >
-                <Text style={[styles.chipText, { color: type === t.value ? '#fff' : theme.textSecondary }]}>{t.label}</Text>
+                <Text
+                  style={[
+                    styles.segmentText,
+                    {
+                      color: type === t.value ? '#FFFFFF' : theme.textSecondary,
+                      fontWeight: type === t.value ? '700' : '500',
+                    },
+                  ]}
+                >
+                  {t.label}
+                </Text>
               </Pressable>
             ))}
           </View>
         </View>
 
-        {/* Target & Unit for non-boolean */}
+        {/* Numeric Target Configuration */}
         {type !== 'boolean' && (
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>Target</Text>
+          <View style={styles.numericConfigRow}>
+            <View style={{ flex: 1, gap: 6 }}>
+              <Text style={[styles.fieldLabel, { color: theme.text }]}>Daily Target</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border, marginTop: 4 }]}
                 value={target}
                 onChangeText={setTarget}
                 keyboardType="numeric"
-                accessibilityLabel="Habit target"
+                style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
               />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>Unit</Text>
+            <View style={{ flex: 1, gap: 6 }}>
+              <Text style={[styles.fieldLabel, { color: theme.text }]}>Unit</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border, marginTop: 4 }]}
                 value={unit}
                 onChangeText={setUnit}
-                placeholder="minutes, reps..."
+                placeholder="reps, mins..."
                 placeholderTextColor={theme.textMuted}
+                style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
               />
             </View>
           </View>
         )}
 
-        {/* Frequency */}
-        <View>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Frequency</Text>
-          <View style={styles.typeRow}>
-            {(['daily', 'weekly', 'custom'] as Frequency[]).map((f) => (
-              <Pressable
-                key={f}
-                onPress={() => setFrequency(f)}
-                style={[
-                  styles.typeChip,
-                  { backgroundColor: frequency === f ? theme.primary : theme.inputBg, borderColor: frequency === f ? theme.primary : theme.border },
-                ]}
-              >
-                <Text style={[styles.chipText, { color: frequency === f ? '#fff' : theme.textSecondary, textTransform: 'capitalize' }]}>{f}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Days for custom/weekly */}
-        {frequency !== 'daily' && (
-          <View>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Days of Week</Text>
-            <View style={styles.daysRow}>
-              {DAYS.map((d, i) => (
+        {/* Routine Placement */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Routine Time</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {ROUTINE_OPTIONS.map((opt) => {
+              const isSelected = routine === opt.period;
+              const OptIcon = opt.icon;
+              return (
                 <Pressable
-                  key={i}
-                  onPress={() => toggleDay(i as DayOfWeek)}
+                  key={opt.label}
+                  onPress={() => setRoutine(opt.period)}
                   style={[
-                    styles.dayBtn,
-                    { backgroundColor: daysOfWeek.includes(i as DayOfWeek) ? theme.primary : theme.inputBg, borderColor: daysOfWeek.includes(i as DayOfWeek) ? theme.primary : theme.border },
+                    styles.routineChip,
+                    {
+                      backgroundColor: isSelected ? theme.primaryDim : theme.surfaceAlt,
+                      borderColor: isSelected ? theme.primary : theme.border,
+                    },
                   ]}
                 >
-                  <Text style={[styles.dayText, { color: daysOfWeek.includes(i as DayOfWeek) ? '#fff' : theme.textSecondary }]}>{d}</Text>
+                  <OptIcon size={14} color={isSelected ? theme.primaryLight : theme.textMuted} />
+                  <Text style={[styles.routineChipText, { color: isSelected ? theme.primaryLight : theme.textSecondary }]}>
+                    {opt.label}
+                  </Text>
                 </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Routine */}
-        <View>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Routine Period</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-            <View style={{ gap: 8, flexDirection: 'row' }}>
-              {ROUTINE_OPTIONS.map((r) => (
-                <Pressable
-                  key={String(r)}
-                  onPress={() => setRoutine(r)}
-                  style={[
-                    styles.chip,
-                    { backgroundColor: routine === r ? theme.primary + '22' : theme.inputBg, borderColor: routine === r ? theme.primary : theme.border },
-                  ]}
-                >
-                  <Text style={[styles.chipText, { color: routine === r ? theme.primary : theme.textSecondary }]}>{r ? r.charAt(0).toUpperCase() + r.slice(1) : 'None'}</Text>
-                </Pressable>
-              ))}
-            </View>
+              );
+            })}
           </ScrollView>
         </View>
 
-        {/* Color & Icon */}
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Pressable onPress={() => setShowColorPicker(!showColorPicker)} style={{ flex: 1 }}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Color</Text>
-            <View style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }]}>
-              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: color }} />
-              <Text style={{ color: theme.text, fontFamily: 'Inter-Regular' }}>{color}</Text>
-            </View>
-          </Pressable>
-          <Pressable onPress={() => setShowIconPicker(!showIconPicker)} style={{ flex: 1 }}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Icon</Text>
-            <View style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }]}>
-              <Icon name={icon} size={20} color={color} />
-              <Text style={{ color: theme.text, fontFamily: 'Inter-Regular' }}>{icon}</Text>
-            </View>
-          </Pressable>
+        {/* Schedule / Repeat Days */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Repeat Schedule</Text>
+          <View style={styles.daysRow}>
+            {DAYS.map((dayName, idx) => {
+              const isSelected = daysOfWeek.includes(idx as DayOfWeek);
+              return (
+                <Pressable
+                  key={dayName}
+                  onPress={() => toggleDay(idx as DayOfWeek)}
+                  style={[
+                    styles.dayPill,
+                    {
+                      backgroundColor: isSelected ? theme.primary : theme.surfaceAlt,
+                      borderColor: isSelected ? theme.primary : theme.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.dayPillText, { color: isSelected ? '#FFFFFF' : theme.textSecondary }]}>
+                    {dayName}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {showColorPicker && (
-          <View style={styles.pickerGrid}>
-            {[...new Set(Object.values(CATEGORY_COLORS)), '#7C5CFC', '#22D3EE', '#3B82F6', '#06D6A0', '#FF6B6B', '#F7B801', '#B084F2', '#F6416C'].map((c) => (
-              <Pressable key={c} onPress={() => { setColor(c); setShowColorPicker(false); }} style={[styles.colorSwatch, { backgroundColor: c, borderColor: color === c ? '#fff' : 'transparent', borderWidth: 3 }]} />
-            ))}
-          </View>
-        )}
+        {/* Category Picker */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Category</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {CATEGORIES.map((cat) => {
+              const isSelected = category === cat;
+              return (
+                <Pressable
+                  key={cat}
+                  onPress={() => setCategory(cat)}
+                  style={[
+                    styles.routineChip,
+                    {
+                      backgroundColor: isSelected ? theme.primaryDim : theme.surfaceAlt,
+                      borderColor: isSelected ? theme.primary : theme.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.routineChipText, { color: isSelected ? theme.primaryLight : theme.textSecondary }]}>
+                    {cat}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
 
-        {showIconPicker && (
-          <View style={styles.pickerGrid}>
-            {ICON_CHOICES.map((ic) => (
+        {/* Color Palette */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Accent Color</Text>
+          <View style={styles.paletteRow}>
+            {COLOR_CHOICES.map((c) => (
               <Pressable
-                key={ic}
-                onPress={() => { setIcon(ic); setShowIconPicker(false); }}
-                style={[styles.iconSwatch, { backgroundColor: icon === ic ? theme.primaryDim : theme.inputBg, borderColor: icon === ic ? theme.primary : theme.border }]}
-              >
-                <Icon name={ic} size={22} color={color} />
-              </Pressable>
+                key={c}
+                onPress={() => setColor(c)}
+                style={[
+                  styles.colorSwatch,
+                  {
+                    backgroundColor: c,
+                    borderColor: color === c ? '#FFFFFF' : 'transparent',
+                    borderWidth: color === c ? 2.5 : 0,
+                    transform: [{ scale: color === c ? 1.15 : 1 }],
+                  },
+                ]}
+              />
             ))}
           </View>
-        )}
+        </View>
 
-        {/* Reminders */}
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Reminders</Text>
-            <Pressable onPress={addReminder} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Plus size={16} color={theme.primary} />
-              <Text style={{ color: theme.primary, fontFamily: 'Inter-Medium', fontSize: 13 }}>Add</Text>
+        {/* Icon Picker Grid */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>Icon</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+            {ICON_CHOICES.map((ic) => {
+              const isSelected = icon === ic;
+              return (
+                <Pressable
+                  key={ic}
+                  onPress={() => setIcon(ic)}
+                  style={[
+                    styles.iconChoice,
+                    {
+                      backgroundColor: isSelected ? color + '30' : theme.surfaceAlt,
+                      borderColor: isSelected ? color : theme.border,
+                    },
+                  ]}
+                >
+                  <Icon name={ic} size={20} color={isSelected ? color : theme.textSecondary} />
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Reminders section */}
+        <View style={styles.formGroup}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[styles.fieldLabel, { color: theme.text }]}>Reminders</Text>
+            <Pressable onPress={addReminder} style={styles.addReminderBtn}>
+              <Plus size={14} color={theme.primary} />
+              <Text style={[styles.addReminderText, { color: theme.primary }]}>Add Reminder</Text>
             </Pressable>
           </View>
-          {reminders.map((r) => (
-            <View key={r.id} style={[styles.reminderCard, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <TextInput
-                  style={[styles.timeInput, { color: theme.text, borderColor: theme.border }]}
-                  value={r.time}
-                  onChangeText={(v) => updateReminder(r.id, { time: v })}
-                  placeholder="HH:mm"
-                />
-                <Switch
-                  value={r.enabled}
-                  onValueChange={(v) => updateReminder(r.id, { enabled: v })}
-                  trackColor={{ true: theme.primary, false: theme.border }}
-                />
-                <Pressable onPress={() => removeReminder(r.id)} hitSlop={8}>
-                  <Trash2 size={18} color={theme.error} />
-                </Pressable>
-              </View>
+
+          {reminders.map((rem) => (
+            <View key={rem.id} style={[styles.reminderRow, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
+              <Clock size={16} color={theme.primaryLight} />
               <TextInput
-                style={[styles.reminderInput, { color: theme.text, borderColor: theme.border }]}
-                value={r.message}
-                onChangeText={(v) => updateReminder(r.id, { message: v, title: name })}
-                placeholder="Reminder message"
+                value={rem.time}
+                onChangeText={(t) => updateReminder(rem.id, { time: t })}
+                placeholder="08:00"
                 placeholderTextColor={theme.textMuted}
+                style={[styles.reminderInput, { color: theme.text }]}
               />
+              <Pressable onPress={() => removeReminder(rem.id)} hitSlop={8}>
+                <Trash2 size={16} color={theme.error} />
+              </Pressable>
             </View>
           ))}
         </View>
 
-        {/* Save */}
-        <Button title={initialHabit ? 'Save Changes' : 'Create Habit'} onPress={handleSave} disabled={!name.trim()} loading={saving} style={{ marginTop: 4 }} />
-      </View>
-
-      {/* Library Modal */}
-      <ModalSheet visible={showLibrary} onClose={() => setShowLibrary(false)} title="Habit Library" maxHeight={80}>
-        <FlatList
-          data={HABIT_LIBRARY}
-          keyExtractor={(item, i) => i.toString()}
-          numColumns={2}
-          scrollEnabled={false}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => applyLibraryHabit(item)}
-              style={(state) => ({ ...styles.libCard, backgroundColor: theme.card, borderColor: theme.cardBorder, opacity: state.pressed ? 0.7 : 1, flex: 1, margin: 4 })}
-            >
-              <View style={[styles.libIcon, { backgroundColor: item.color + '22' }]}>
-                <Icon name={item.icon} size={22} color={item.color} />
-              </View>
-              <Text style={[styles.libName, { color: theme.text }]} numberOfLines={1}>{item.name}</Text>
-              <Text style={[styles.libDesc, { color: theme.textSecondary }]} numberOfLines={2}>{item.description}</Text>
-            </Pressable>
-          )}
+        {/* Save button */}
+        <Button
+          title={initialHabit ? 'Save Changes' : 'Create Habit'}
+          variant="primary"
+          size="lg"
+          loading={saving}
+          onPress={handleSave}
+          style={{ marginTop: spacing.sm }}
         />
-      </ModalSheet>
+      </View>
     </ModalSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  label: {
+  formGroup: {
+    gap: 8,
+  },
+  fieldLabel: {
     fontFamily: 'Inter-Medium',
     fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 4,
+    fontWeight: '600',
+  },
+  sectionSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 18,
   },
   input: {
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 14,
     fontFamily: 'Inter-Regular',
     fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
   },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
+  segmentContainer: {
+    flexDirection: 'row',
+    borderRadius: radius.md,
+    padding: 4,
   },
-  chipText: {
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: radius.sm,
+  },
+  segmentText: {
     fontFamily: 'Inter-Medium',
     fontSize: 13,
-    fontWeight: '500',
   },
-  typeRow: {
+  numericConfigRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    flexWrap: 'wrap',
+    gap: 12,
   },
-  typeChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1.5,
+  routineChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  routineChipText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
   },
   daysRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 8,
     justifyContent: 'space-between',
+    gap: 4,
   },
-  dayBtn: {
+  dayPill: {
     flex: 1,
-    maxWidth: 38,
     height: 38,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    borderRadius: radius.sm,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  dayText: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 14,
-    fontWeight: '700',
+  dayPillText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 11,
+    fontWeight: '600',
   },
-  pickerGrid: {
+  paletteRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    paddingVertical: 8,
+    gap: 10,
   },
   colorSwatch: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
-  iconSwatch: {
+  iconChoice: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: radius.md,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  reminderCard: {
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
+  addReminderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  timeInput: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 16,
-    fontWeight: '700',
+  addReminderText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    flex: 1,
-    marginRight: 8,
+    gap: 10,
   },
   reminderInput: {
-    fontFamily: 'Inter-Regular',
+    flex: 1,
+    fontFamily: 'Inter-Medium',
     fontSize: 14,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    padding: 0,
   },
   libCard: {
-    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 14,
+    borderRadius: radius.card,
     borderWidth: 1,
+    gap: 12,
   },
-  libIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  libIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
   },
   libName: {
     fontFamily: 'Inter-Bold',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
   libDesc: {
     fontFamily: 'Inter-Regular',
     fontSize: 12,
-    marginTop: 4,
+  },
+  libMeta: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
 });

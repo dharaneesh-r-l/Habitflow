@@ -148,7 +148,7 @@ export function HabitDetailModal({
         {/* Quick Today Logger */}
         <View style={[styles.loggerCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.loggerTitle, { color: theme.textSecondary }]}>Today's Status</Text>
+            <Text style={[styles.loggerTitle, { color: theme.textSecondary }]}>Today&apos;s Status</Text>
             <Text style={[styles.loggerVal, { color: isDoneToday ? theme.success : theme.text }]}>
               {habit.type === 'boolean'
                 ? isDoneToday

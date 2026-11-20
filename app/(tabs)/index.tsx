@@ -380,7 +380,7 @@ export default function HomeScreen() {
 
         {/* Routine Sections */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Today's Routine</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Today&apos;s Routine</Text>
           <Pressable
             onPress={() => setShowCreateModal(true)}
             style={styles.newHabitLink}

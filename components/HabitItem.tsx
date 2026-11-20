@@ -80,9 +80,9 @@ export function HabitItem({
   const handleToggle = () => {
     if (readOnly) return;
     if (!reduceMotion) {
-      scale.value = withSpring(0.85, { damping: 10, stiffness: 300 }, (finished) => {
-        if (finished) scale.value = withSpring(1);
-      });
+      scale.set(withSpring(0.85, { damping: 10, stiffness: 300 }, (finished) => {
+        if (finished) scale.set(withSpring(1));
+      }));
     }
     if (hapticsEnabled) {
       void Haptics.impactAsync(

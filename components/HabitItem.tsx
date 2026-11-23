@@ -14,6 +14,7 @@ import { Icon } from '@/components/IconHelper';
 import { Habit, CompletionEntry } from '@/types';
 import { useHabitStore } from '@/store/habitStore';
 import { radius, spacing } from '@/theme/tokens';
+import { format12Hour } from '@/components/ui/ClockTimePickerModal';
 
 interface HabitItemProps {
   habit: Habit;
@@ -179,7 +180,7 @@ export function HabitItem({
                 <View style={styles.reminderRow}>
                   <Clock size={11} color={theme.textMuted} />
                   <Text style={[styles.reminderText, { color: theme.textMuted }]}>
-                    {reminderTime}
+                    {format12Hour(reminderTime)}
                   </Text>
                 </View>
               )}

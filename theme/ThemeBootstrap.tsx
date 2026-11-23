@@ -1,8 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { useAppTheme } from '@/theme/ThemeContext';
-import { getLevelFromXP } from '@/utils/date';
-import { useHabitStore } from '@/store/habitStore';
+import React, { useEffect } from 'react';
 import { useFonts } from 'expo-font';
 import {
   Inter_400Regular,

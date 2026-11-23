@@ -5,10 +5,8 @@ import {
   eachDayOfInterval,
   startOfMonth,
   endOfMonth,
-  isSameDay,
   parseISO,
   differenceInCalendarDays,
-  addDays,
   subDays,
 } from 'date-fns';
 import { CompletionEntry, Habit } from '@/types';

@@ -7,7 +7,6 @@ import {
   Flame,
   AlertTriangle,
   Lightbulb,
-  CheckCircle2,
   Clock,
   Sunrise,
   Sparkles,
@@ -17,7 +16,6 @@ import {
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { HabitDetailModal } from '@/components/HabitDetailModal';
 import { HabitFormModal } from '@/components/HabitFormModal';
 import { Habit } from '@/types';

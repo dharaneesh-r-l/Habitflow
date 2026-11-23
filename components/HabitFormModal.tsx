@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   Alert,
+  Switch,
 } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Button } from '@/components/ui/Button';
@@ -20,12 +21,39 @@ import {
   RoutinePeriod,
   Reminder,
   CATEGORIES,
+  CATEGORY_COLORS,
 } from '@/types';
 import { HABIT_LIBRARY } from '@/data/habitLibrary';
 import { Icon } from '@/components/IconHelper';
 import { uid } from '@/utils/date';
-import { Plus, Trash2, BookOpen, Clock, Sunrise, Sun, Moon, Star } from 'lucide-react-native';
-import { spacing, radius } from '@/theme/tokens';
+import {
+  Plus,
+  Trash2,
+  BookOpen,
+  Clock,
+  Sunrise,
+  Sun,
+  Moon,
+  Star,
+  Sparkles,
+  Dumbbell,
+  Heart,
+  TrendingUp,
+  Zap,
+  Apple,
+  Wallet,
+  Smile,
+  Bell,
+  Check,
+  Calendar,
+  Layers,
+  Palette,
+} from 'lucide-react-native';
+import { radius } from '@/theme/tokens';
+import {
+  ClockTimePickerModal,
+  format12Hour,
+} from '@/components/ui/ClockTimePickerModal';
 
 interface HabitFormProps {
   initialHabit?: Habit;
@@ -33,11 +61,11 @@ interface HabitFormProps {
   onClose: () => void;
 }
 
-const HABIT_TYPES: { value: HabitType; label: string }[] = [
-  { value: 'boolean', label: 'Yes / No' },
-  { value: 'count', label: 'Count' },
-  { value: 'duration', label: 'Duration' },
-  { value: 'target', label: 'Target' },
+const HABIT_TYPES: { value: HabitType; label: string; description: string }[] = [
+  { value: 'boolean', label: 'Simple (Yes/No)', description: 'Done or not done' },
+  { value: 'count', label: 'Count', description: 'Track number of times' },
+  { value: 'duration', label: 'Duration', description: 'Track time in minutes' },
+  { value: 'target', label: 'Target', description: 'Reach a specific goal' },
 ];
 
 const ROUTINE_OPTIONS: { period: RoutinePeriod | null; label: string; icon: any }[] = [
@@ -47,6 +75,18 @@ const ROUTINE_OPTIONS: { period: RoutinePeriod | null; label: string; icon: any 
   { period: 'evening', label: 'Evening', icon: Moon },
   { period: 'night', label: 'Night', icon: Star },
 ];
+
+const CATEGORY_ICON_MAP: Record<HabitCategory, any> = {
+  Fitness: Dumbbell,
+  Health: Heart,
+  Learning: BookOpen,
+  Career: TrendingUp,
+  Productivity: Zap,
+  'Mental Wellness': Sparkles,
+  Nutrition: Apple,
+  Finance: Wallet,
+  'Personal Care': Smile,
+};
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -96,25 +136,43 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
   const [showLibrary, setShowLibrary] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Clock picker state for editing reminder time
+  const [clockPickerVisible, setClockPickerVisible] = useState(false);
+  const [activeReminderId, setActiveReminderId] = useState<string | null>(null);
+
   const toggleDay = (day: DayOfWeek) => {
-    setDaysOfWeek((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
+    setDaysOfWeek((prev) => {
+      const next = prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day];
+      return next.sort((a, b) => a - b);
+    });
+  };
+
+  const selectAllDays = () => {
+    setDaysOfWeek([0, 1, 2, 3, 4, 5, 6]);
+    setFrequency('daily');
+  };
+
+  const selectWeekdays = () => {
+    setDaysOfWeek([1, 2, 3, 4, 5]);
+    setFrequency('custom');
+  };
+
+  const selectWeekends = () => {
+    setDaysOfWeek([0, 6]);
+    setFrequency('custom');
   };
 
   const addReminder = () => {
-    setReminders([
-      ...reminders,
-      {
-        id: uid(),
-        time: '08:00',
-        days: frequency === 'daily' ? [] : daysOfWeek,
-        enabled: true,
-        title: name || 'Habit',
-        message: `Time for ${name || 'your habit'}`,
-        sound: true,
-      },
-    ]);
+    const newRem: Reminder = {
+      id: uid(),
+      time: '08:00',
+      days: frequency === 'daily' ? [] : daysOfWeek,
+      enabled: true,
+      title: name.trim() || 'Habit Reminder',
+      message: `Time for ${name.trim() || 'your habit'}!`,
+      sound: true,
+    };
+    setReminders([...reminders, newRem]);
   };
 
   const updateReminder = (id: string, updates: Partial<Reminder>) => {
@@ -125,7 +183,20 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
     setReminders((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const applyLibraryHabit = (lib: typeof HABIT_LIBRARY[0]) => {
+  const openClockPickerForReminder = (reminderId: string) => {
+    setActiveReminderId(reminderId);
+    setClockPickerVisible(true);
+  };
+
+  const handleTimeConfirm = (time24: string) => {
+    if (activeReminderId) {
+      updateReminder(activeReminderId, { time: time24 });
+    }
+    setClockPickerVisible(false);
+    setActiveReminderId(null);
+  };
+
+  const applyLibraryHabit = (lib: (typeof HABIT_LIBRARY)[0]) => {
     setName(lib.name);
     setDescription(lib.description);
     setCategory(lib.category);
@@ -153,20 +224,16 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Habit name required', 'Please enter a name for this habit.');
+      Alert.alert('Habit Name Required', 'Please enter a name for your habit.');
       return;
     }
     const targetValue = Number(target);
     if (type !== 'boolean' && (!Number.isFinite(targetValue) || targetValue <= 0)) {
-      Alert.alert('Check your goal', 'Enter a numeric target greater than zero.');
+      Alert.alert('Invalid Target', 'Please enter a valid target greater than zero.');
       return;
     }
-    if (frequency !== 'daily' && daysOfWeek.length === 0) {
-      Alert.alert('Choose a schedule', 'Select at least one day for this habit.');
-      return;
-    }
-    if (reminders.some((r) => r.enabled && !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time))) {
-      Alert.alert('Check reminder time', 'Please use 24-hour format (e.g. 08:30).');
+    if (daysOfWeek.length === 0) {
+      Alert.alert('Schedule Required', 'Please select at least one day for this habit.');
       return;
     }
 
@@ -177,186 +244,424 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
         description: description.trim(),
         category,
         type,
-        frequency,
-        daysOfWeek: frequency === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : daysOfWeek,
+        frequency: daysOfWeek.length === 7 ? 'daily' : frequency,
+        daysOfWeek,
         target: type === 'boolean' ? 1 : targetValue,
-        unit: unit.trim() || 'done',
+        unit: type === 'boolean' ? 'done' : unit.trim() || 'times',
         color,
         icon,
         routine,
-        startDate: initialHabit?.startDate || new Date().toISOString().slice(0, 10),
-        archived: initialHabit?.archived || false,
-        paused: initialHabit?.paused || false,
+        startDate: initialHabit?.startDate || new Date().toISOString().split('T')[0],
+        archived: initialHabit?.archived ?? false,
+        paused: initialHabit?.paused ?? false,
         reminders,
       });
       onClose();
     } catch {
-      Alert.alert('Could not save', 'Please check your inputs and try again.');
+      Alert.alert('Error', 'Failed to save habit. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  if (showLibrary) {
-    return (
-      <ModalSheet visible onClose={() => setShowLibrary(false)} title="Habit Templates">
-        <View style={{ gap: spacing.md }}>
-          <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
-            Pick from curated, science-backed habits to get started instantly.
-          </Text>
-          {HABIT_LIBRARY.map((lib, i) => (
-            <Pressable
-              key={i}
-              onPress={() => applyLibraryHabit(lib)}
-              style={({ pressed }) => [
-                styles.libCard,
-                { backgroundColor: theme.surfaceAlt, borderColor: theme.border, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={[styles.libIconWrap, { backgroundColor: lib.color + '22' }]}>
-                <Icon name={lib.icon} size={22} color={lib.color} />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={[styles.libName, { color: theme.text }]}>{lib.name}</Text>
-                <Text style={[styles.libDesc, { color: theme.textSecondary }]}>{lib.description}</Text>
-                <Text style={[styles.libMeta, { color: lib.color }]}>
-                  {lib.category} · {lib.type === 'boolean' ? 'Daily check-in' : `${lib.target} ${lib.unit}`}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      </ModalSheet>
-    );
-  }
+  const currentReminder = reminders.find((r) => r.id === activeReminderId);
 
   return (
-    <ModalSheet visible onClose={onClose} title={initialHabit ? 'Edit Habit' : 'Create New Habit'}>
-      <View style={{ gap: spacing.lg }}>
+    <ModalSheet
+      visible={true}
+      onClose={onClose}
+      title={initialHabit ? 'Edit Habit' : 'Create New Habit'}
+      maxHeight={92}
+    >
+      <View style={styles.formContainer}>
+        {/* Template Quick Selection Banner */}
         {!initialHabit && (
-          <Button
-            title="Browse Habit Templates"
-            variant="secondary"
-            icon={<BookOpen size={18} color={theme.primaryLight} />}
-            onPress={() => setShowLibrary(true)}
-          />
+          <Pressable
+            onPress={() => setShowLibrary(!showLibrary)}
+            style={[
+              styles.libraryBanner,
+              {
+                backgroundColor: theme.primaryDim,
+                borderColor: theme.primary,
+              },
+            ]}
+          >
+            <Sparkles size={16} color={theme.primaryLight} />
+            <Text style={[styles.libraryBannerText, { color: theme.primaryLight }]}>
+              {showLibrary ? 'Hide Habit Ideas' : 'Choose from Habit Ideas & Templates'}
+            </Text>
+          </Pressable>
         )}
 
-        {/* Habit Name */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Habit Name</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Read 30 minutes, Morning workout..."
-            placeholderTextColor={theme.textMuted}
-            style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
-          />
-        </View>
-
-        {/* Description */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Motivation / Description (Optional)</Text>
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Why do you want to build this habit?"
-            placeholderTextColor={theme.textMuted}
-            style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
-          />
-        </View>
-
-        {/* Habit Type Segmented Control */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Habit Type</Text>
-          <View style={[styles.segmentContainer, { backgroundColor: theme.surfaceAlt }]}>
-            {HABIT_TYPES.map((t) => (
-              <Pressable
-                key={t.value}
-                onPress={() => {
-                  setType(t.value);
-                  setUnit(COMMON_UNITS[t.value][0]);
-                }}
-                style={[
-                  styles.segmentBtn,
-                  {
-                    backgroundColor: type === t.value ? theme.primary : 'transparent',
-                  },
-                ]}
-              >
-                <Text
+        {/* Library Accordion */}
+        {showLibrary && (
+          <View
+            style={[
+              styles.libraryBox,
+              {
+                backgroundColor: theme.surfaceAlt,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <Text style={[styles.libraryTitle, { color: theme.textSecondary }]}>
+              Tap any template to auto-fill:
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+            >
+              {HABIT_LIBRARY.slice(0, 10).map((lib) => (
+                <Pressable
+                  key={lib.name}
+                  onPress={() => applyLibraryHabit(lib)}
                   style={[
-                    styles.segmentText,
+                    styles.libraryChip,
                     {
-                      color: type === t.value ? '#FFFFFF' : theme.textSecondary,
-                      fontWeight: type === t.value ? '700' : '500',
+                      backgroundColor: theme.surface,
+                      borderColor: theme.cardBorder,
                     },
                   ]}
                 >
-                  {t.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Numeric Target Configuration */}
-        {type !== 'boolean' && (
-          <View style={styles.numericConfigRow}>
-            <View style={{ flex: 1, gap: 6 }}>
-              <Text style={[styles.fieldLabel, { color: theme.text }]}>Daily Target</Text>
-              <TextInput
-                value={target}
-                onChangeText={setTarget}
-                keyboardType="numeric"
-                style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
-              />
-            </View>
-            <View style={{ flex: 1, gap: 6 }}>
-              <Text style={[styles.fieldLabel, { color: theme.text }]}>Unit</Text>
-              <TextInput
-                value={unit}
-                onChangeText={setUnit}
-                placeholder="reps, mins..."
-                placeholderTextColor={theme.textMuted}
-                style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
-              />
-            </View>
+                  <Icon name={lib.icon} size={15} color={lib.color} />
+                  <Text style={[styles.libraryChipText, { color: theme.text }]}>
+                    {lib.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         )}
 
-        {/* Routine Placement */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Routine Time</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {ROUTINE_OPTIONS.map((opt) => {
-              const isSelected = routine === opt.period;
-              const OptIcon = opt.icon;
+        {/* SECTION 1: BASIC DETAILS */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Layers size={16} color={theme.primaryLight} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              1. Basic Details
+            </Text>
+          </View>
+
+          {/* Name */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.text }]}>
+              Habit Name *
+            </Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Morning Jog, Read 20 pages"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.surfaceAlt,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
+              maxLength={50}
+            />
+          </View>
+
+          {/* Category */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.text }]}>Category</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8 }}
+            >
+              {CATEGORIES.map((cat) => {
+                const isSelected = category === cat;
+                const CatIcon = CATEGORY_ICON_MAP[cat] || Sparkles;
+                const catColor = CATEGORY_COLORS[cat];
+
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => setCategory(cat)}
+                    style={[
+                      styles.categoryCard,
+                      {
+                        backgroundColor: isSelected ? theme.primaryDim : theme.surfaceAlt,
+                        borderColor: isSelected ? theme.primary : theme.border,
+                      },
+                    ]}
+                  >
+                    <CatIcon size={16} color={isSelected ? theme.primaryLight : catColor} />
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        {
+                          color: isSelected ? theme.primaryLight : theme.textSecondary,
+                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium',
+                        },
+                      ]}
+                    >
+                      {cat}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Description */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+              Description (Optional)
+            </Text>
+            <TextInput
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Why does this habit matter to you?"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.surfaceAlt,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
+              maxLength={120}
+            />
+          </View>
+        </View>
+
+        {/* SECTION 2: HABIT TYPE & GOAL */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Check size={16} color={theme.accent} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              2. Goal & Measurement
+            </Text>
+          </View>
+
+          {/* Habit Type selector */}
+          <View style={styles.typeGrid}>
+            {HABIT_TYPES.map((t) => {
+              const isSelected = type === t.value;
               return (
                 <Pressable
-                  key={opt.label}
-                  onPress={() => setRoutine(opt.period)}
+                  key={t.value}
+                  onPress={() => {
+                    setType(t.value);
+                    if (t.value === 'boolean') {
+                      setUnit('done');
+                      setTarget('1');
+                    } else if (unit === 'done') {
+                      setUnit(COMMON_UNITS[t.value][0] || 'times');
+                      setTarget(t.value === 'duration' ? '30' : '5');
+                    }
+                  }}
                   style={[
-                    styles.routineChip,
+                    styles.typeCard,
                     {
                       backgroundColor: isSelected ? theme.primaryDim : theme.surfaceAlt,
                       borderColor: isSelected ? theme.primary : theme.border,
                     },
                   ]}
                 >
-                  <OptIcon size={14} color={isSelected ? theme.primaryLight : theme.textMuted} />
-                  <Text style={[styles.routineChipText, { color: isSelected ? theme.primaryLight : theme.textSecondary }]}>
-                    {opt.label}
+                  <Text
+                    style={[
+                      styles.typeTitle,
+                      {
+                        color: isSelected ? theme.primaryLight : theme.text,
+                      },
+                    ]}
+                  >
+                    {t.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.typeDesc,
+                      {
+                        color: isSelected ? theme.primaryLight + 'CC' : theme.textMuted,
+                      },
+                    ]}
+                  >
+                    {t.description}
                   </Text>
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
+
+          {/* Numeric config when measurable */}
+          {type !== 'boolean' && (
+            <View style={styles.numericRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.fieldLabel, { color: theme.text }]}>
+                  Daily Target
+                </Text>
+                <TextInput
+                  value={target}
+                  onChangeText={setTarget}
+                  keyboardType="numeric"
+                  placeholder="30"
+                  placeholderTextColor={theme.textMuted}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.surfaceAlt,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={{ flex: 1.2 }}>
+                <Text style={[styles.fieldLabel, { color: theme.text }]}>Unit</Text>
+                <TextInput
+                  value={unit}
+                  onChangeText={setUnit}
+                  placeholder="e.g. pages, mins"
+                  placeholderTextColor={theme.textMuted}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.surfaceAlt,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Unit suggestion chips */}
+          {type !== 'boolean' && (
+            <View style={styles.unitChipsRow}>
+              {COMMON_UNITS[type].map((u) => (
+                <Pressable
+                  key={u}
+                  onPress={() => setUnit(u)}
+                  style={[
+                    styles.unitChip,
+                    {
+                      backgroundColor: unit === u ? theme.primaryDim : theme.surfaceAlt,
+                      borderColor: unit === u ? theme.primary : theme.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.unitChipText,
+                      {
+                        color: unit === u ? theme.primaryLight : theme.textSecondary,
+                      },
+                    ]}
+                  >
+                    {u}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* Schedule / Repeat Days */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Repeat Schedule</Text>
+        {/* SECTION 3: SCHEDULE & ROUTINE */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Calendar size={16} color={theme.streak} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              3. Schedule & Routine
+            </Text>
+          </View>
+
+          {/* Quick preset filters */}
+          <View style={styles.quickScheduleRow}>
+            <Pressable
+              onPress={selectAllDays}
+              style={[
+                styles.quickScheduleBtn,
+                {
+                  backgroundColor: daysOfWeek.length === 7 ? theme.primaryDim : theme.surfaceAlt,
+                  borderColor: daysOfWeek.length === 7 ? theme.primary : theme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.quickScheduleText,
+                  {
+                    color: daysOfWeek.length === 7 ? theme.primaryLight : theme.textSecondary,
+                  },
+                ]}
+              >
+                Everyday
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={selectWeekdays}
+              style={[
+                styles.quickScheduleBtn,
+                {
+                  backgroundColor:
+                    daysOfWeek.length === 5 && !daysOfWeek.includes(0) && !daysOfWeek.includes(6)
+                      ? theme.primaryDim
+                      : theme.surfaceAlt,
+                  borderColor:
+                    daysOfWeek.length === 5 && !daysOfWeek.includes(0) && !daysOfWeek.includes(6)
+                      ? theme.primary
+                      : theme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.quickScheduleText,
+                  {
+                    color:
+                      daysOfWeek.length === 5 && !daysOfWeek.includes(0) && !daysOfWeek.includes(6)
+                        ? theme.primaryLight
+                        : theme.textSecondary,
+                  },
+                ]}
+              >
+                Weekdays
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={selectWeekends}
+              style={[
+                styles.quickScheduleBtn,
+                {
+                  backgroundColor:
+                    daysOfWeek.length === 2 && daysOfWeek.includes(0) && daysOfWeek.includes(6)
+                      ? theme.primaryDim
+                      : theme.surfaceAlt,
+                  borderColor:
+                    daysOfWeek.length === 2 && daysOfWeek.includes(0) && daysOfWeek.includes(6)
+                      ? theme.primary
+                      : theme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.quickScheduleText,
+                  {
+                    color:
+                      daysOfWeek.length === 2 && daysOfWeek.includes(0) && daysOfWeek.includes(6)
+                        ? theme.primaryLight
+                        : theme.textSecondary,
+                  },
+                ]}
+              >
+                Weekends
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Weekday pills */}
           <View style={styles.daysRow}>
             {DAYS.map((dayName, idx) => {
               const isSelected = daysOfWeek.includes(idx as DayOfWeek);
@@ -372,143 +677,345 @@ export function HabitFormModal({ initialHabit, onSave, onClose }: HabitFormProps
                     },
                   ]}
                 >
-                  <Text style={[styles.dayPillText, { color: isSelected ? '#FFFFFF' : theme.textSecondary }]}>
+                  <Text
+                    style={[
+                      styles.dayPillText,
+                      { color: isSelected ? '#FFFFFF' : theme.textSecondary },
+                    ]}
+                  >
                     {dayName}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-        </View>
 
-        {/* Category Picker */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {CATEGORIES.map((cat) => {
-              const isSelected = category === cat;
-              return (
-                <Pressable
-                  key={cat}
-                  onPress={() => setCategory(cat)}
-                  style={[
-                    styles.routineChip,
-                    {
-                      backgroundColor: isSelected ? theme.primaryDim : theme.surfaceAlt,
-                      borderColor: isSelected ? theme.primary : theme.border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.routineChipText, { color: isSelected ? theme.primaryLight : theme.textSecondary }]}>
-                    {cat}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Color Palette */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Accent Color</Text>
-          <View style={styles.paletteRow}>
-            {COLOR_CHOICES.map((c) => (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                style={[
-                  styles.colorSwatch,
-                  {
-                    backgroundColor: c,
-                    borderColor: color === c ? '#FFFFFF' : 'transparent',
-                    borderWidth: color === c ? 2.5 : 0,
-                    transform: [{ scale: color === c ? 1.15 : 1 }],
-                  },
-                ]}
-              />
-            ))}
+          {/* Routine Time of Day */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+              Routine Period
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8 }}
+            >
+              {ROUTINE_OPTIONS.map((opt) => {
+                const isSelected = routine === opt.period;
+                const OptIcon = opt.icon;
+                return (
+                  <Pressable
+                    key={opt.label}
+                    onPress={() => setRoutine(opt.period)}
+                    style={[
+                      styles.routineChip,
+                      {
+                        backgroundColor: isSelected ? theme.primaryDim : theme.surfaceAlt,
+                        borderColor: isSelected ? theme.primary : theme.border,
+                      },
+                    ]}
+                  >
+                    <OptIcon
+                      size={15}
+                      color={isSelected ? theme.primaryLight : theme.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.routineChipText,
+                        {
+                          color: isSelected ? theme.primaryLight : theme.textSecondary,
+                        },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
 
-        {/* Icon Picker Grid */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Icon</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-            {ICON_CHOICES.map((ic) => {
-              const isSelected = icon === ic;
-              return (
-                <Pressable
-                  key={ic}
-                  onPress={() => setIcon(ic)}
-                  style={[
-                    styles.iconChoice,
-                    {
-                      backgroundColor: isSelected ? color + '30' : theme.surfaceAlt,
-                      borderColor: isSelected ? color : theme.border,
-                    },
-                  ]}
-                >
-                  <Icon name={ic} size={20} color={isSelected ? color : theme.textSecondary} />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Reminders section */}
-        <View style={styles.formGroup}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={[styles.fieldLabel, { color: theme.text }]}>Reminders</Text>
-            <Pressable onPress={addReminder} style={styles.addReminderBtn}>
-              <Plus size={14} color={theme.primary} />
-              <Text style={[styles.addReminderText, { color: theme.primary }]}>Add Reminder</Text>
+        {/* SECTION 4: SMART CLOCK REMINDERS */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeader}>
+              <Bell size={16} color={theme.primaryLight} />
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                4. Reminders
+              </Text>
+            </View>
+            <Pressable
+              onPress={addReminder}
+              style={[
+                styles.addReminderBtn,
+                {
+                  backgroundColor: theme.primaryDim,
+                  borderColor: theme.primary,
+                },
+              ]}
+            >
+              <Plus size={14} color={theme.primaryLight} />
+              <Text style={[styles.addReminderText, { color: theme.primaryLight }]}>
+                Add Reminder
+              </Text>
             </Pressable>
           </View>
 
-          {reminders.map((rem) => (
-            <View key={rem.id} style={[styles.reminderRow, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
-              <Clock size={16} color={theme.primaryLight} />
-              <TextInput
-                value={rem.time}
-                onChangeText={(t) => updateReminder(rem.id, { time: t })}
-                placeholder="08:00"
-                placeholderTextColor={theme.textMuted}
-                style={[styles.reminderInput, { color: theme.text }]}
-              />
-              <Pressable onPress={() => removeReminder(rem.id)} hitSlop={8}>
-                <Trash2 size={16} color={theme.error} />
-              </Pressable>
+          {reminders.length === 0 ? (
+            <View
+              style={[
+                styles.emptyRemindersBox,
+                {
+                  backgroundColor: theme.surfaceAlt,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Clock size={20} color={theme.textMuted} />
+              <Text style={[styles.emptyRemindersText, { color: theme.textMuted }]}>
+                No reminder set. Tap &apos;Add Reminder&apos; to get smart alerts.
+              </Text>
             </View>
-          ))}
+          ) : (
+            reminders.map((rem, idx) => (
+              <View
+                key={rem.id}
+                style={[
+                  styles.reminderCard,
+                  {
+                    backgroundColor: theme.surfaceAlt,
+                    borderColor: rem.enabled ? theme.cardBorderHighlight : theme.border,
+                  },
+                ]}
+              >
+                <View style={styles.reminderCardLeft}>
+                  {/* Tap time to open Circular Clock Dialer */}
+                  <Pressable
+                    onPress={() => openClockPickerForReminder(rem.id)}
+                    style={[
+                      styles.timePickerTrigger,
+                      {
+                        backgroundColor: theme.surfaceElevated,
+                        borderColor: theme.primary,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Change reminder time from ${format12Hour(rem.time)}`}
+                  >
+                    <Clock size={16} color={theme.primaryLight} />
+                    <Text style={[styles.timePickerTriggerText, { color: theme.text }]}>
+                      {format12Hour(rem.time)}
+                    </Text>
+                  </Pressable>
+
+                  <View style={styles.reminderInfo}>
+                    <Text style={[styles.reminderLabel, { color: theme.textSecondary }]}>
+                      Reminder #{idx + 1}
+                    </Text>
+                    <Text style={[styles.reminderDaysBadge, { color: theme.textMuted }]}>
+                      {daysOfWeek.length === 7 ? 'Everyday' : `${daysOfWeek.length} days / week`}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.reminderCardRight}>
+                  {/* Enabled switch */}
+                  <Switch
+                    value={rem.enabled}
+                    onValueChange={(val) => updateReminder(rem.id, { enabled: val })}
+                    trackColor={{ false: theme.border, true: theme.primary }}
+                    thumbColor="#FFFFFF"
+                  />
+
+                  {/* Remove reminder */}
+                  <Pressable
+                    onPress={() => removeReminder(rem.id)}
+                    style={styles.deleteReminderBtn}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete reminder"
+                  >
+                    <Trash2 size={16} color={theme.error} />
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
-        {/* Save button */}
-        <Button
-          title={initialHabit ? 'Save Changes' : 'Create Habit'}
-          variant="primary"
-          size="lg"
-          loading={saving}
-          onPress={handleSave}
-          style={{ marginTop: spacing.sm }}
-        />
+        {/* SECTION 5: APPEARANCE */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Palette size={16} color={theme.xp} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              5. Appearance
+            </Text>
+          </View>
+
+          {/* Color palette */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+              Accent Color
+            </Text>
+            <View style={styles.paletteRow}>
+              {COLOR_CHOICES.map((c) => (
+                <Pressable
+                  key={c}
+                  onPress={() => setColor(c)}
+                  style={[
+                    styles.colorSwatch,
+                    {
+                      backgroundColor: c,
+                      borderColor: color === c ? '#FFFFFF' : 'transparent',
+                      borderWidth: color === c ? 2.5 : 0,
+                      transform: [{ scale: color === c ? 1.15 : 1 }],
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* Icon picker */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Icon</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10 }}
+            >
+              {ICON_CHOICES.map((ic) => {
+                const isSelected = icon === ic;
+                return (
+                  <Pressable
+                    key={ic}
+                    onPress={() => setIcon(ic)}
+                    style={[
+                      styles.iconChoice,
+                      {
+                        backgroundColor: isSelected ? color + '30' : theme.surfaceAlt,
+                        borderColor: isSelected ? color : theme.border,
+                      },
+                    ]}
+                  >
+                    <Icon
+                      name={ic}
+                      size={20}
+                      color={isSelected ? color : theme.textSecondary}
+                    />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.buttonRow}>
+          <Button
+            title="Cancel"
+            variant="ghost"
+            size="lg"
+            onPress={onClose}
+            style={{ flex: 1 }}
+          />
+
+          <Button
+            title={initialHabit ? 'Save Changes' : 'Create Habit'}
+            variant="primary"
+            size="lg"
+            loading={saving}
+            onPress={handleSave}
+            style={{ flex: 2 }}
+          />
+        </View>
       </View>
+
+      {/* Circular Clock Dialer Modal */}
+      {clockPickerVisible && (
+        <ClockTimePickerModal
+          visible={clockPickerVisible}
+          initialTime={currentReminder?.time || '08:00'}
+          title="Select Reminder Time"
+          onConfirm={handleTimeConfirm}
+          onClose={() => {
+            setClockPickerVisible(false);
+            setActiveReminderId(null);
+          }}
+        />
+      )}
     </ModalSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  formGroup: {
+  formContainer: {
+    gap: 20,
+    paddingBottom: 24,
+  },
+  libraryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
+  libraryBannerText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  libraryBox: {
+    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: 8,
+  },
+  libraryTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  libraryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  libraryChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  section: {
+    gap: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  formGroup: {
+    gap: 6,
   },
   fieldLabel: {
     fontFamily: 'Inter-Medium',
     fontSize: 13,
     fontWeight: '600',
-  },
-  sectionSubtitle: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 13,
-    lineHeight: 18,
   },
   input: {
     height: 48,
@@ -518,24 +1025,88 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 15,
   },
-  segmentContainer: {
+  categoryCard: {
     flexDirection: 'row',
-    borderRadius: radius.md,
-    padding: 4,
-  },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: radius.sm,
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1,
   },
-  segmentText: {
-    fontFamily: 'Inter-Medium',
+  categoryText: {
     fontSize: 13,
   },
-  numericConfigRow: {
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  typeCard: {
+    width: '48.5%',
+    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: 3,
+  },
+  typeTitle: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  typeDesc: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+  },
+  numericRow: {
     flexDirection: 'row',
     gap: 12,
+  },
+  unitChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  unitChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  unitChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  quickScheduleRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickScheduleBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  quickScheduleText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  dayPill: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  dayPillText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 11,
+    fontWeight: '600',
   },
   routineChip: {
     flexDirection: 'row',
@@ -550,94 +1121,97 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     fontSize: 12,
   },
-  daysRow: {
+  addReminderBtn: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 4,
-  },
-  dayPill: {
-    flex: 1,
-    height: 38,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
   },
-  dayPillText: {
+  addReminderText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyRemindersBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
+  emptyRemindersText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  reminderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
+  reminderCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timePickerTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    borderWidth: 1.5,
+  },
+  timePickerTriggerText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  reminderInfo: {
+    gap: 2,
+  },
+  reminderLabel: {
     fontFamily: 'Inter-Medium',
+    fontSize: 12,
+  },
+  reminderDaysBadge: {
     fontSize: 11,
-    fontWeight: '600',
+  },
+  reminderCardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  deleteReminderBtn: {
+    padding: 6,
   },
   paletteRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    justifyContent: 'space-between',
   },
   colorSwatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   iconChoice: {
     width: 44,
     height: 44,
     borderRadius: radius.md,
-    borderWidth: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addReminderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  addReminderText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  reminderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: radius.md,
     borderWidth: 1,
-    gap: 10,
   },
-  reminderInput: {
-    flex: 1,
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-    padding: 0,
-  },
-  libCard: {
+  buttonRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: radius.card,
-    borderWidth: 1,
     gap: 12,
-  },
-  libIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  libName: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  libDesc: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-  },
-  libMeta: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
+    marginTop: 8,
   },
 });

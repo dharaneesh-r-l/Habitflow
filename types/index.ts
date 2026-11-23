@@ -97,6 +97,10 @@ export interface AppPreferences {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   userName: string;
+  nickname?: string;
+  wakeUpTime?: string; // HH:mm
+  bedTime?: string; // HH:mm
+  onboardingCompleted?: boolean;
   notificationsEnabled: boolean;
 }
 

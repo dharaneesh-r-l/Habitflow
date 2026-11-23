@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/Button';
 import { HabitItem } from '@/components/HabitItem';
 import { HabitDetailModal } from '@/components/HabitDetailModal';
 import { HabitFormModal } from '@/components/HabitFormModal';
-import { Icon } from '@/components/IconHelper';
 import { Habit, CATEGORIES, HabitCategory } from '@/types';
 import {
   calculateStreak,

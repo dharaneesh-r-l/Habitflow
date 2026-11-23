@@ -11,7 +11,6 @@ import {
   Sun,
   Moon,
   Clock,
-  TrendingUp,
   Plus,
   Trophy,
   CheckCircle2,
@@ -26,7 +25,7 @@ import { HabitItem } from '@/components/HabitItem';
 import { HabitDetailModal } from '@/components/HabitDetailModal';
 import { HabitFormModal } from '@/components/HabitFormModal';
 import { Icon } from '@/components/IconHelper';
-import { Habit, HabitType, RoutinePeriod } from '@/types';
+import { Habit, RoutinePeriod } from '@/types';
 import {
   getGreeting,
   formatDateLabel,
@@ -36,6 +35,7 @@ import {
 } from '@/utils/date';
 import { DAILY_CHALLENGES } from '@/data/achievements';
 import { spacing, radius } from '@/theme/tokens';
+import { format12Hour } from '@/components/ui/ClockTimePickerModal';
 
 const ROUTINE_CONFIG: Record<
   RoutinePeriod,
@@ -88,6 +88,7 @@ export default function HomeScreen() {
 
   const scheduledHabits = useMemo(() => {
     return getScheduledHabitsForDate(today).sort((a, b) => a.order - b.order);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getScheduledHabitsForDate, today, habits]);
 
   // Group by routine
@@ -196,7 +197,7 @@ export default function HomeScreen() {
         <Animated.View entering={FadeIn.duration(400)} style={styles.topHeader}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.greeting, { color: theme.textSecondary }]}>
-              {getGreeting()}, {preferences.userName === 'there' ? 'Leader' : preferences.userName}
+              {getGreeting()}, {preferences.nickname || (preferences.userName === 'there' ? 'Leader' : preferences.userName)}
             </Text>
             <Text style={[styles.todayDate, { color: theme.text }]}>
               {formatDateLabel(today)}
@@ -370,7 +371,7 @@ export default function HomeScreen() {
                     {r.habitName}
                   </Text>
                   <View style={[styles.timeBadge, { backgroundColor: theme.primaryDim }]}>
-                    <Text style={[styles.timeBadgeText, { color: theme.primaryLight }]}>{r.time}</Text>
+                    <Text style={[styles.timeBadgeText, { color: theme.primaryLight }]}>{format12Hour(r.time)}</Text>
                   </View>
                 </Pressable>
               ))}

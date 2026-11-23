@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, useWindowDimensions, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line, Text as SvgText } from 'react-native-svg';
-import { Flame, Trophy, Target, CheckCircle2, TrendingUp, BarChart3, PieChart } from 'lucide-react-native';
+import { Flame, Trophy, CheckCircle2, TrendingUp } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
 import { Card } from '@/components/ui/Card';

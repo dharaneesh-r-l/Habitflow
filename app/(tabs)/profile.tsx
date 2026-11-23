@@ -19,15 +19,18 @@ import {
   Calendar,
   Download,
   Trash2,
-  Info,
   Flame,
   Zap,
   Target,
   User,
-  CheckCircle,
   Trophy,
   ShieldAlert,
   Sparkles,
+  Sunrise,
+  Clock,
+  Edit3,
+  X,
+  ChevronRight,
 } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
@@ -37,6 +40,10 @@ import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Icon } from '@/components/IconHelper';
 import { getLevelFromXP } from '@/utils/date';
 import { spacing, radius } from '@/theme/tokens';
+import {
+  ClockTimePickerModal,
+  format12Hour,
+} from '@/components/ui/ClockTimePickerModal';
 
 export default function ProfileScreen() {
   const { theme, mode, toggle } = useAppTheme();
@@ -49,12 +56,27 @@ export default function ProfileScreen() {
   const exportData = useHabitStore((s) => s.exportData);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
-  const [editingName, setEditingName] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [nameInput, setNameInput] = useState(preferences.userName);
+  const [nicknameInput, setNicknameInput] = useState(preferences.nickname || '');
+  const [wakeUpInput, setWakeUpInput] = useState(preferences.wakeUpTime || '07:00');
+  const [hasWakeUp, setHasWakeUp] = useState(!!preferences.wakeUpTime);
+  const [bedTimeInput, setBedTimeInput] = useState(preferences.bedTime || '23:00');
+  const [hasBedTime, setHasBedTime] = useState(!!preferences.bedTime);
+  const [clockTarget, setClockTarget] = useState<'wakeup' | 'bedtime' | null>(null);
 
   const levelInfo = getLevelFromXP(stats.xp);
   const unlockedAchievements = achievements.filter((a) => a.unlockedAt);
+
+  const openProfileEditor = () => {
+    setNameInput(preferences.userName === 'there' ? '' : preferences.userName);
+    setNicknameInput(preferences.nickname || '');
+    setWakeUpInput(preferences.wakeUpTime || '07:00');
+    setHasWakeUp(!!preferences.wakeUpTime);
+    setBedTimeInput(preferences.bedTime || '23:00');
+    setHasBedTime(!!preferences.bedTime);
+    setEditingProfile(true);
+  };
 
   const handleExport = async () => {
     try {
@@ -68,11 +90,29 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSaveName = async () => {
-    if (nameInput.trim()) {
-      await updatePreferences({ userName: nameInput.trim() });
+  const handleSaveProfile = async () => {
+    if (!nameInput.trim()) {
+      Alert.alert('First Name Required', 'Please enter your first name.');
+      return;
     }
-    setEditingName(false);
+    await updatePreferences({
+      userName: nameInput.trim(),
+      nickname: nicknameInput.trim() || undefined,
+      wakeUpTime: hasWakeUp ? wakeUpInput : undefined,
+      bedTime: hasBedTime ? bedTimeInput : undefined,
+    });
+    setEditingProfile(false);
+  };
+
+  const handleClockConfirm = (time24: string) => {
+    if (clockTarget === 'wakeup') {
+      setWakeUpInput(time24);
+      setHasWakeUp(true);
+    } else if (clockTarget === 'bedtime') {
+      setBedTimeInput(time24);
+      setHasBedTime(true);
+    }
+    setClockTarget(null);
   };
 
   const handleNotificationPreference = async (enabled: boolean) => {
@@ -116,13 +156,43 @@ export default function ProfileScreen() {
 
           {/* User Name */}
           <Pressable
-            onPress={() => setEditingName(true)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}
+            onPress={openProfileEditor}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}
           >
             <Text style={[styles.userNameText, { color: theme.text }]}>
               {preferences.userName === 'there' ? 'HabitFlow Athlete' : preferences.userName}
             </Text>
+            {preferences.nickname && (
+              <View style={[styles.nicknameBadge, { backgroundColor: theme.primaryDim }]}>
+                <Text style={[styles.nicknameBadgeText, { color: theme.primaryLight }]}>
+                  @{preferences.nickname}
+                </Text>
+              </View>
+            )}
+            <Edit3 size={15} color={theme.textMuted} />
           </Pressable>
+
+          {/* Daily Routine Summary (Wake-up & Bedtime) */}
+          {(preferences.wakeUpTime || preferences.bedTime) && (
+            <View style={styles.routinePillsRow}>
+              {preferences.wakeUpTime && (
+                <View style={[styles.profileRoutinePill, { backgroundColor: theme.surfaceAlt }]}>
+                  <Sunrise size={12} color="#FFA07A" />
+                  <Text style={[styles.profileRoutineText, { color: theme.textSecondary }]}>
+                    {format12Hour(preferences.wakeUpTime)}
+                  </Text>
+                </View>
+              )}
+              {preferences.bedTime && (
+                <View style={[styles.profileRoutinePill, { backgroundColor: theme.surfaceAlt }]}>
+                  <Moon size={12} color="#8B5CF6" />
+                  <Text style={[styles.profileRoutineText, { color: theme.textSecondary }]}>
+                    {format12Hour(preferences.bedTime)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Level Pill */}
           <View style={[styles.levelPill, { backgroundColor: theme.xpDim, borderColor: theme.xp + '40' }]}>
@@ -205,6 +275,22 @@ export default function ProfileScreen() {
         {/* Preferences */}
         <Text style={[styles.sectionHeading, { color: theme.text }]}>Preferences</Text>
         <Card style={{ marginBottom: spacing.md, padding: 0, backgroundColor: theme.surface }}>
+          {/* Personal Profile Row */}
+          <Pressable onPress={openProfileEditor} style={styles.settingItem}>
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.primaryDim }]}>
+              <User size={18} color={theme.primaryLight} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingTitle, { color: theme.text }]}>Personal Profile</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.textSecondary }]}>
+                Name, nickname, wake-up & bedtime
+              </Text>
+            </View>
+            <ChevronRight size={18} color={theme.textMuted} />
+          </Pressable>
+
+          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+
           <View style={styles.settingItem}>
             <View style={[styles.settingIconWrap, { backgroundColor: theme.accentDim }]}>
               <Bell size={18} color={theme.accent} />
@@ -372,19 +458,174 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* Edit Name Modal */}
-      <ModalSheet visible={editingName} onClose={() => setEditingName(false)} title="Change Display Name">
-        <View style={{ gap: spacing.md }}>
-          <TextInput
-            value={nameInput}
-            onChangeText={setNameInput}
-            placeholder="Your name"
-            placeholderTextColor={theme.textMuted}
-            style={[styles.nameInputBox, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
+      {/* Edit Personal Details Modal */}
+      <ModalSheet
+        visible={editingProfile}
+        onClose={() => setEditingProfile(false)}
+        title="Personal Details"
+        maxHeight={88}
+      >
+        <View style={{ gap: spacing.md, paddingBottom: 16 }}>
+          {/* First Name */}
+          <View style={styles.profileEditGroup}>
+            <Text style={[styles.profileEditLabel, { color: theme.text }]}>
+              First Name *
+            </Text>
+            <TextInput
+              value={nameInput}
+              onChangeText={setNameInput}
+              placeholder="e.g. Dharaneesh"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.nameInputBox,
+                {
+                  backgroundColor: theme.surfaceAlt,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
+            />
+          </View>
+
+          {/* Nickname */}
+          <View style={styles.profileEditGroup}>
+            <Text style={[styles.profileEditLabel, { color: theme.textSecondary }]}>
+              Nickname (Optional)
+            </Text>
+            <TextInput
+              value={nicknameInput}
+              onChangeText={setNicknameInput}
+              placeholder="e.g. Dharan"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.nameInputBox,
+                {
+                  backgroundColor: theme.surfaceAlt,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
+            />
+          </View>
+
+          {/* Daily Wake-up Time */}
+          <View style={styles.profileEditGroup}>
+            <Text style={[styles.profileEditLabel, { color: theme.textSecondary }]}>
+              Daily Wake-up Time (Optional)
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Pressable
+                onPress={() => setClockTarget('wakeup')}
+                style={[
+                  styles.profileTimeCard,
+                  {
+                    backgroundColor: theme.surfaceAlt,
+                    borderColor: hasWakeUp ? theme.primary : theme.border,
+                    flex: 1,
+                  },
+                ]}
+              >
+                <Sunrise size={18} color={hasWakeUp ? '#FFA07A' : theme.textMuted} />
+                <Text
+                  style={[
+                    styles.profileTimeText,
+                    {
+                      color: hasWakeUp ? theme.text : theme.textMuted,
+                      fontFamily: hasWakeUp ? 'Inter-Bold' : 'Inter-Regular',
+                    },
+                  ]}
+                >
+                  {hasWakeUp ? format12Hour(wakeUpInput) : 'Set wake-up time'}
+                </Text>
+                <Clock
+                  size={15}
+                  color={theme.primaryLight}
+                  style={{ marginLeft: 'auto' }}
+                />
+              </Pressable>
+              {hasWakeUp && (
+                <Pressable
+                  onPress={() => setHasWakeUp(false)}
+                  style={[styles.clearTimeBtn, { backgroundColor: theme.surfaceAlt }]}
+                  hitSlop={8}
+                >
+                  <X size={16} color={theme.textSecondary} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+
+          {/* Preferred Bedtime */}
+          <View style={styles.profileEditGroup}>
+            <Text style={[styles.profileEditLabel, { color: theme.textSecondary }]}>
+              Preferred Bedtime (Optional)
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Pressable
+                onPress={() => setClockTarget('bedtime')}
+                style={[
+                  styles.profileTimeCard,
+                  {
+                    backgroundColor: theme.surfaceAlt,
+                    borderColor: hasBedTime ? theme.primary : theme.border,
+                    flex: 1,
+                  },
+                ]}
+              >
+                <Moon size={18} color={hasBedTime ? '#8B5CF6' : theme.textMuted} />
+                <Text
+                  style={[
+                    styles.profileTimeText,
+                    {
+                      color: hasBedTime ? theme.text : theme.textMuted,
+                      fontFamily: hasBedTime ? 'Inter-Bold' : 'Inter-Regular',
+                    },
+                  ]}
+                >
+                  {hasBedTime ? format12Hour(bedTimeInput) : 'Set bedtime'}
+                </Text>
+                <Clock
+                  size={15}
+                  color={theme.primaryLight}
+                  style={{ marginLeft: 'auto' }}
+                />
+              </Pressable>
+              {hasBedTime && (
+                <Pressable
+                  onPress={() => setHasBedTime(false)}
+                  style={[styles.clearTimeBtn, { backgroundColor: theme.surfaceAlt }]}
+                  hitSlop={8}
+                >
+                  <X size={16} color={theme.textSecondary} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+
+          <Button
+            title="Save Details"
+            variant="primary"
+            size="lg"
+            onPress={handleSaveProfile}
+            style={{ marginTop: spacing.xs }}
           />
-          <Button title="Save Name" variant="primary" onPress={handleSaveName} />
         </View>
       </ModalSheet>
+
+      {/* Clock Dialer for Profile Times */}
+      {clockTarget !== null && (
+        <ClockTimePickerModal
+          visible={clockTarget !== null}
+          initialTime={clockTarget === 'wakeup' ? wakeUpInput : bedTimeInput}
+          title={
+            clockTarget === 'wakeup'
+              ? 'Select Daily Wake-up Time'
+              : 'Select Preferred Bedtime'
+          }
+          onConfirm={handleClockConfirm}
+          onClose={() => setClockTarget(null)}
+        />
+      )}
 
       {/* Confirm Reset Modal */}
       <ModalSheet visible={showResetConfirm} onClose={() => setShowResetConfirm(false)} title="Confirm Reset">
@@ -581,6 +822,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontFamily: 'Inter-Medium',
     fontSize: 15,
+  },
+  nicknameBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+  },
+  nicknameBadgeText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 11,
+  },
+  routinePillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  profileRoutinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  profileRoutineText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 11,
+  },
+  profileEditGroup: {
+    gap: 6,
+  },
+  profileEditLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  profileTimeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+  },
+  profileTimeText: {
+    fontSize: 14,
+  },
+  clearTimeBtn: {
+    width: 44,
+    height: 48,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   warningBox: {
     flexDirection: 'row',

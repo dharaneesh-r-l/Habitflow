@@ -7,6 +7,7 @@ const KEYS = {
   ACHIEVEMENTS: 'habitflow_achievements',
   STATS: 'habitflow_stats',
   SEEDED: 'habitflow_seeded',
+  ONBOARDING_COMPLETED: 'habitflow_onboarding_completed',
 };
 
 export const storage = {

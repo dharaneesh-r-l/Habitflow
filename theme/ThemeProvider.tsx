@@ -11,7 +11,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     init();
-  }, []);
+  }, [init]);
 
   const mode: ThemeMode = preferences.theme;
   const theme = mode === 'dark' ? darkTheme : lightTheme;

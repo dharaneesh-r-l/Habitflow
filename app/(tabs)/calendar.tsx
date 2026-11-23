@@ -5,9 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar as CalIcon,
-  CheckCircle2,
   Clock,
-  Flame,
   Check,
 } from 'lucide-react-native';
 import { useAppTheme } from '@/theme/ThemeContext';
@@ -29,18 +27,17 @@ import {
   startOfDay,
 } from 'date-fns';
 import { dateKey, isCompletionComplete } from '@/utils/date';
+import { Habit } from '@/types';
 import { spacing, radius } from '@/theme/tokens';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function CalendarScreen() {
   const { theme } = useAppTheme();
-  const habits = useHabitStore((s) => s.habits);
   const completions = useHabitStore((s) => s.completions);
   const getScheduledHabitsForDate = useHabitStore((s) => s.getScheduledHabitsForDate);
   const getCompletionsForDate = useHabitStore((s) => s.getCompletionsForDate);
   const getCompletionRateForDate = useHabitStore((s) => s.getCompletionRateForDate);
-  const toggleCompletion = useHabitStore((s) => s.toggleCompletion);
   const logCompletion = useHabitStore((s) => s.logCompletion);
   const removeCompletion = useHabitStore((s) => s.removeCompletion);
   const preferences = useHabitStore((s) => s.preferences);
@@ -62,12 +59,6 @@ export default function CalendarScreen() {
   const selectedCompletions = getCompletionsForDate(selectedKey);
   const selectedScheduled = getScheduledHabitsForDate(selectedDate);
   const selectedRate = getCompletionRateForDate(selectedKey);
-  const selectedCompletedCount = selectedScheduled.filter((habit) =>
-    isCompletionComplete(
-      habit,
-      selectedCompletions.find((c) => c.habitId === habit.id)
-    )
-  ).length;
 
   // Monthly summary metrics
   const monthStats = useMemo(() => {
@@ -92,7 +83,7 @@ export default function CalendarScreen() {
 
     const avgRate = totalScheduledCount > 0 ? Math.round((totalCompletedCount / totalScheduledCount) * 100) : 0;
     return { avgRate, perfectDays, totalCompletedCount };
-  }, [monthDays, currentMonth, getScheduledHabitsForDate, getCompletionsForDate, completions]);
+  }, [monthDays, currentMonth, getScheduledHabitsForDate, getCompletionsForDate]);
 
   const getDayStyle = (date: Date) => {
     if (!isSameMonth(date, currentMonth)) {
@@ -151,7 +142,7 @@ export default function CalendarScreen() {
     };
   };
 
-  const handleToggleHabitOnDate = (habit: (typeof habits)[0]) => {
+  const handleToggleHabitOnDate = (habit: Habit) => {
     const comp = selectedCompletions.find((c) => c.habitId === habit.id);
     if (habit.type === 'boolean') {
       if (comp) {

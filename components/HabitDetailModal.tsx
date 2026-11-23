@@ -13,14 +13,13 @@ import {
   Plus,
   Minus,
   Check,
-  RotateCcw,
 } from 'lucide-react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/IconHelper';
 import { useAppTheme } from '@/theme/ThemeContext';
 import { useHabitStore } from '@/store/habitStore';
-import { Habit, CompletionEntry } from '@/types';
+import { Habit } from '@/types';
 import {
   calculateStreak,
   calculateLongestStreak,
@@ -31,6 +30,7 @@ import {
 } from '@/utils/date';
 import { subDays, format } from 'date-fns';
 import { radius, spacing } from '@/theme/tokens';
+import { format12Hour } from '@/components/ui/ClockTimePickerModal';
 
 interface HabitDetailModalProps {
   habit?: Habit;
@@ -257,7 +257,7 @@ export function HabitDetailModal({
           <View style={[styles.reminderCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
             <Clock size={18} color={theme.primaryLight} />
             <Text style={[styles.reminderText, { color: theme.text }]}>
-              Scheduled for {habit.reminders.filter((r) => r.enabled).map((r) => r.time).join(', ')}
+              Scheduled for {habit.reminders.filter((r) => r.enabled).map((r) => format12Hour(r.time)).join(', ')}
             </Text>
           </View>
         )}

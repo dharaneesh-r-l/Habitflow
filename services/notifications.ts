@@ -114,6 +114,40 @@ export async function scheduleAllReminders(habits: Habit[]): Promise<void> {
   }
 }
 
+export async function cancelReminderNotifications(reminderId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const matches = scheduled.filter(
+      (notification) => notification.content.data?.reminderId === reminderId
+    );
+    await Promise.all(
+      matches.map((notification) =>
+        Notifications.cancelScheduledNotificationAsync(notification.identifier)
+      )
+    );
+  } catch (e) {
+    console.error('Failed to cancel reminder notifications', e);
+  }
+}
+
+export async function cancelHabitNotifications(habitId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const matches = scheduled.filter(
+      (notification) => notification.content.data?.habitId === habitId
+    );
+    await Promise.all(
+      matches.map((notification) =>
+        Notifications.cancelScheduledNotificationAsync(notification.identifier)
+      )
+    );
+  } catch (e) {
+    console.error('Failed to cancel habit notifications', e);
+  }
+}
+
 export async function cancelAllReminders(): Promise<void> {
   if (Platform.OS === 'web') return;
   try {

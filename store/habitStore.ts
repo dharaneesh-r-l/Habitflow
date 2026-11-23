@@ -28,6 +28,7 @@ const DEFAULT_PREFS: AppPreferences = {
   hapticsEnabled: true,
   userName: 'there',
   notificationsEnabled: true,
+  onboardingCompleted: false,
 };
 
 const DEFAULT_STATS: UserStats = {
@@ -72,6 +73,12 @@ interface HabitState {
   getActiveHabits: () => Habit[];
 
   updatePreferences: (updates: Partial<AppPreferences>) => Promise<void>;
+  completeOnboarding: (data: {
+    firstName: string;
+    nickname?: string;
+    wakeUpTime?: string;
+    bedTime?: string;
+  }) => Promise<void>;
   unlockAchievement: (type: string) => void;
   resetAllData: () => Promise<void>;
   exportData: () => string;
@@ -143,33 +150,67 @@ export const useHabitStore = create<HabitState>((set, get) => ({
 
   init: async () => {
     try {
-      const [habits, completions, prefs, achievements, stats, seeded] = await Promise.all([
-        storage.get<Habit[]>(storage.KEYS.HABITS),
-        storage.get<CompletionEntry[]>(storage.KEYS.COMPLETIONS),
-        storage.get<AppPreferences>(storage.KEYS.PREFERENCES),
-        storage.get<Achievement[]>(storage.KEYS.ACHIEVEMENTS),
-        storage.get<UserStats>(storage.KEYS.STATS),
-        storage.get<boolean>(storage.KEYS.SEEDED),
-      ]);
+      const [habits, completions, prefs, achievements, stats, seeded, storedOnboardingCompleted] =
+        await Promise.all([
+          storage.get<Habit[]>(storage.KEYS.HABITS),
+          storage.get<CompletionEntry[]>(storage.KEYS.COMPLETIONS),
+          storage.get<AppPreferences>(storage.KEYS.PREFERENCES),
+          storage.get<Achievement[]>(storage.KEYS.ACHIEVEMENTS),
+          storage.get<UserStats>(storage.KEYS.STATS),
+          storage.get<boolean>(storage.KEYS.SEEDED),
+          storage.get<boolean>(storage.KEYS.ONBOARDING_COMPLETED),
+        ]);
 
-      if (!prefs) {
-        await storage.set(storage.KEYS.PREFERENCES, DEFAULT_PREFS);
+      // Safe migration for existing installations:
+      // If user already had data (habits, completions, or seeded flag), do NOT force onboarding!
+      const hasExistingData =
+        (habits !== null && habits.length > 0) ||
+        seeded === true ||
+        (completions !== null && completions.length > 0);
+
+      let onboardingCompleted = false;
+      if (storedOnboardingCompleted !== null && storedOnboardingCompleted !== undefined) {
+        onboardingCompleted = storedOnboardingCompleted;
+      } else if (prefs?.onboardingCompleted !== undefined) {
+        onboardingCompleted = prefs.onboardingCompleted;
+      } else if (hasExistingData) {
+        // Safe migration rule: existing user gets onboardingCompleted = true
+        onboardingCompleted = true;
+        await storage.set(storage.KEYS.ONBOARDING_COMPLETED, true);
       }
 
-      if (!seeded && (!habits || habits.length === 0)) {
+      const activePreferences: AppPreferences = {
+        ...DEFAULT_PREFS,
+        ...(prefs || {}),
+        onboardingCompleted,
+      };
+
+      if (!prefs) {
+        await storage.set(storage.KEYS.PREFERENCES, activePreferences);
+      }
+
+      // Only seed sample habits if explicitly marked seeded in existing installation,
+      // never overwrite or force sample habits on a new onboarding user.
+      if (seeded && (!habits || habits.length === 0)) {
         const sampleHabits = generateSampleHabits();
         const sampleCompletions = generateSampleCompletions(sampleHabits);
         const sampleStats = computeStats(sampleHabits, sampleCompletions);
         await storage.set(storage.KEYS.HABITS, sampleHabits);
         await storage.set(storage.KEYS.COMPLETIONS, sampleCompletions);
         await storage.set(storage.KEYS.STATS, sampleStats);
-        await storage.set(storage.KEYS.SEEDED, true);
-        set({ habits: sampleHabits, completions: sampleCompletions, stats: sampleStats, preferences: prefs || DEFAULT_PREFS, achievements: achievements || ACHIEVEMENTS, loaded: true });
+        set({
+          habits: sampleHabits,
+          completions: sampleCompletions,
+          stats: sampleStats,
+          preferences: activePreferences,
+          achievements: achievements || ACHIEVEMENTS,
+          loaded: true,
+        });
       } else {
         set({
           habits: habits || [],
           completions: completions || [],
-          preferences: prefs || DEFAULT_PREFS,
+          preferences: activePreferences,
           achievements: achievements || ACHIEVEMENTS,
           stats: stats || DEFAULT_STATS,
           loaded: true,
@@ -341,6 +382,9 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     const preferences = { ...get().preferences, ...updates };
     set({ preferences });
     await storage.set(storage.KEYS.PREFERENCES, preferences);
+    if (updates.onboardingCompleted !== undefined) {
+      await storage.set(storage.KEYS.ONBOARDING_COMPLETED, updates.onboardingCompleted);
+    }
     if (updates.notificationsEnabled !== undefined) {
       if (preferences.notificationsEnabled) {
         await scheduleAllReminders(get().habits);
@@ -348,6 +392,23 @@ export const useHabitStore = create<HabitState>((set, get) => ({
         await cancelAllReminders();
       }
     }
+  },
+
+  completeOnboarding: async (data) => {
+    const currentPrefs = get().preferences;
+    const updatedPrefs: AppPreferences = {
+      ...currentPrefs,
+      userName: data.firstName.trim() || currentPrefs.userName || 'there',
+      nickname: data.nickname?.trim() || undefined,
+      wakeUpTime: data.wakeUpTime || undefined,
+      bedTime: data.bedTime || undefined,
+      onboardingCompleted: true,
+    };
+    set({ preferences: updatedPrefs });
+    await Promise.all([
+      storage.set(storage.KEYS.PREFERENCES, updatedPrefs),
+      storage.set(storage.KEYS.ONBOARDING_COMPLETED, true),
+    ]);
   },
 
   unlockAchievement: (type) => {
@@ -361,7 +422,13 @@ export const useHabitStore = create<HabitState>((set, get) => ({
   resetAllData: async () => {
     await cancelAllReminders();
     await storage.clearAll();
-    set({ habits: [], completions: [], preferences: DEFAULT_PREFS, achievements: ACHIEVEMENTS, stats: DEFAULT_STATS });
+    set({
+      habits: [],
+      completions: [],
+      preferences: { ...DEFAULT_PREFS, onboardingCompleted: false },
+      achievements: ACHIEVEMENTS,
+      stats: DEFAULT_STATS,
+    });
   },
 
   exportData: () => {

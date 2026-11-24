@@ -173,8 +173,9 @@ export const useHabitStore = create<HabitState>((set, get) => ({
         onboardingCompleted = storedOnboardingCompleted;
       } else if (prefs?.onboardingCompleted !== undefined) {
         onboardingCompleted = prefs.onboardingCompleted;
-      } else if (hasExistingData) {
-        // Safe migration rule: existing user gets onboardingCompleted = true
+      }
+
+      if (hasExistingData && !onboardingCompleted) {
         onboardingCompleted = true;
         await storage.set(storage.KEYS.ONBOARDING_COMPLETED, true);
       }
@@ -189,33 +190,14 @@ export const useHabitStore = create<HabitState>((set, get) => ({
         await storage.set(storage.KEYS.PREFERENCES, activePreferences);
       }
 
-      // Only seed sample habits if explicitly marked seeded in existing installation,
-      // never overwrite or force sample habits on a new onboarding user.
-      if (seeded && (!habits || habits.length === 0)) {
-        const sampleHabits = generateSampleHabits();
-        const sampleCompletions = generateSampleCompletions(sampleHabits);
-        const sampleStats = computeStats(sampleHabits, sampleCompletions);
-        await storage.set(storage.KEYS.HABITS, sampleHabits);
-        await storage.set(storage.KEYS.COMPLETIONS, sampleCompletions);
-        await storage.set(storage.KEYS.STATS, sampleStats);
-        set({
-          habits: sampleHabits,
-          completions: sampleCompletions,
-          stats: sampleStats,
-          preferences: activePreferences,
-          achievements: achievements || ACHIEVEMENTS,
-          loaded: true,
-        });
-      } else {
-        set({
-          habits: habits || [],
-          completions: completions || [],
-          preferences: activePreferences,
-          achievements: achievements || ACHIEVEMENTS,
-          stats: stats || DEFAULT_STATS,
-          loaded: true,
-        });
-      }
+      set({
+        habits: habits || [],
+        completions: completions || [],
+        preferences: activePreferences,
+        achievements: achievements || ACHIEVEMENTS,
+        stats: stats || DEFAULT_STATS,
+        loaded: true,
+      });
 
       recalcStats(set, get);
       claimDailyChallenge(set, get);

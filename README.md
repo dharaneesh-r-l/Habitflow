@@ -65,9 +65,58 @@ npm run web
 # Web build
 npm run build:web
 
-# Android build (requires EAS)
-eas build --platform android
+# First OTA-enabled production APK (install over the existing app; requires EAS)
+npx eas-cli build --platform android --profile production-apk
 ```
+
+The `production-apk` profile creates an installable APK on the production update
+channel. The existing `production` profile remains an Android App Bundle profile
+for store releases. Both use the same production channel.
+
+## Over-the-Air Updates
+
+The app checks for updates automatically when it launches. A compatible update
+downloads in the background and is applied on the next app launch, rather than
+restarting the app while it is in use. If the device is offline, the last
+available embedded or downloaded update remains usable.
+
+Test an update with a preview-channel build first:
+
+```bash
+npx eas-cli build --platform android --profile preview
+npx eas-cli update --channel preview --message "Describe the preview update"
+```
+
+After testing and approval, publish to production:
+
+```bash
+npx eas-cli update --channel production --message "Describe your update"
+```
+
+OTA updates are for JavaScript, React Native UI/logic, and bundled asset changes
+that are compatible with the installed native runtime. Adding or changing native
+dependencies, Android code or permissions, native configuration, or the Expo
+SDK requires a new native build. The `fingerprint` runtime-version policy
+separates updates by native runtime, so an update is not offered to a build with
+a different native fingerprint.
+
+### Local data and migrations
+
+EAS Updates replace the JavaScript/assets bundle; they do not clear or recreate
+AsyncStorage. HabitFlow continues to use its existing local storage keys:
+`habitflow_habits`, `habitflow_completions`, `habitflow_preferences`,
+`habitflow_achievements`, `habitflow_stats`, `habitflow_seeded`, and
+`habitflow_onboarding_completed`. No storage keys, Zustand store structure, or
+data migrations are introduced by OTA configuration. A native APK upgrade must
+be installed over the existing app (same Android package and signing key), not
+after uninstalling it, to retain Android app data.
+
+If a future app release changes persisted data, add a versioned migration that
+reads the current version, transforms only necessary fields, preserves existing
+records, and writes the new version only after success. Keep a recoverable copy
+of the original data until validation succeeds; on failure, retain and continue
+using the old data rather than replacing it with defaults. Test migrations
+against copies of representative stored records before release.
 
 ## Project Structure
 
@@ -108,7 +157,7 @@ eas build --platform android
 
 ## Data Storage
 
-All data is stored locally using AsyncStorage — no server or account required. The app seeds sample habits on first launch for demonstration. Use the Profile > Reset All Data option to start fresh.
+All data is stored locally using AsyncStorage — no server or account required. Sample habits can be loaded explicitly from Profile > Load Sample Habits. Use the Profile > Reset All Data option to start fresh.
 
 ## Notifications
 
